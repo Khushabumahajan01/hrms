@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="dashboard-center">
+
+    <h1>Welcome {{ session.get("employee_name") }} 👋</h1>
+    <p class="subtitle">Your personal workspace</p>
+
+    <div class="employee-stats">
+
+        <div class="stat-card">
+            <h3>📅 Attendance</h3>
+            <p>View & manage your daily attendance</p>
+            <a href="/hrms/attendance" class="btn-small">Go</a>
+        </div>
+
+        <div class="stat-card">
+            <h3>💰 Payroll</h3>
+            <p>Check your salary records</p>
+            <a href="/hrms/my-payroll" class="btn-small">View</a>
+        </div>
+
+        <div class="stat-card">
+            <h3>🏖 Leave</h3>
+            <p>Apply & track leave requests</p>
+            <a href="/hrms/leave" class="btn-small">Apply</a>
+        </div>
+
+        <div class="stat-card">
+            <h3>📈 Performance</h3>
+            <p>View your evaluations & history</p>
+            <a href="/hrms/performance/my_evaluations" class="btn-small">View</a>
+        </div>
+
+    </div>
+
+</div>
+
+<style>
+.dashboard-center {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.dashboard-center h1 {
+    margin: 0;
+    font-size: clamp(30px, 4vw, 42px) !important;
+    line-height: 1.2;
+    letter-spacing: 0.2px;
+}
+
+.dashboard-center .subtitle {
+    margin-top: 8px;
+    font-size: 16px;
+    color: #a3adc2;
+}
+
+.employee-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 25px;
+    margin-top: 40px;
+}
+
+.stat-card {
+    background: #111;
+    padding: 20px;
+    border-radius: 14px;
+    border: 1px solid #222;
+    transition: 0.3s;
+}
+
+.stat-card h3 {
+    font-size: 22px;
+    line-height: 1.3;
+    margin: 0 0 8px;
+}
+
+.stat-card p {
+    font-size: 18px;
+    line-height: 1.45;
+    margin: 0;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+}
+
+.btn-small {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 6px 12px;
+    background: linear-gradient(45deg,#3b82f6,#6366f1);
+    border-radius: 6px;
+    color: white;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+@media (max-width: 992px) {
+    .employee-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        margin-top: 28px;
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-center h1 {
+        font-size: 26px !important;
+        line-height: 1.25;
+    }
+
+    .dashboard-center .subtitle {
+        font-size: 14px;
+    }
+
+    .employee-stats {
+        grid-template-columns: 1fr;
+        gap: 14px;
+        margin-top: 22px;
+    }
+
+    .stat-card {
+        padding: 16px;
+    }
+
+    .stat-card h3 {
+        font-size: 18px;
+        margin-bottom: 8px;
+    }
+
+    .stat-card p {
+        font-size: 14px;
+        margin-bottom: 10px;
+    }
+
+    .btn-small {
+        width: 100%;
+        text-align: center;
+        padding: 10px 12px;
+    }
+}
+</style>
+
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+@media (max-width: 768px) {
+    .leave-table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+</style>
+
+<h2>Leave Requests</h2>
+
+<div class="leave-table-wrap"><table class="hrms-table">
+    <tr>
+        <th>Employee</th>
+        <th>Type</th>
+        <th>From</th>
+        <th>To</th>
+        <th>Status</th>
+        <th>Action</th>
+    </tr>
+
+    {% for r in requests %}
+    <tr>
+        <td>{{ r.full_name }}</td>
+        <td>{{ r.type }}</td>
+        <td>{{ r.from_date }}</td>
+        <td>{{ r.to_date }}</td>
+        <td>{{ r.status }}</td>
+        <td>
+            {% if (r.status or '')|lower == "pending" %}
+                <a href="/hrms/leave/update/{{ r.id }}/approve">Approve</a>
+                |
+                <a href="/hrms/leave/update/{{ r.id }}/reject">Reject</a>
+            {% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</table></div>
+
+{% endblock %}

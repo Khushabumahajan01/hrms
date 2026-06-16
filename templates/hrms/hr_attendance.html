@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="hrms-wrapper">
+
+    <div class="hrms-header">
+        <h2>HR Attendance Panel</h2>
+    </div>
+
+    <!-- FILTER CARD -->
+    <div class="hrms-card filter-card">
+
+        <form method="GET" class="filter-form">
+
+            <div class="filter-group">
+                <label>Employee</label>
+                <select name="employee_id">
+                    <option value="">All Employees</option>
+                    {% for emp in employees %}
+                    <option value="{{ emp.id }}"
+                        {% if request.args.get('employee_id') == emp.id|string %}selected{% endif %}>
+                        {{ emp.full_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label>From Date</label>
+                <input type="date" name="from_date"
+                       value="{{ request.args.get('from_date','') }}">
+            </div>
+
+            <div class="filter-group">
+                <label>To Date</label>
+                <input type="date" name="to_date"
+                       value="{{ request.args.get('to_date','') }}">
+            </div>
+
+            <div class="filter-group button-group">
+                <button type="submit" class="btn-filter">
+                    🔍 Apply Filter
+                </button>
+
+                <a href="/hrms/attendance" class="btn-reset">
+                    Reset
+                </a>
+            </div>
+
+        </form>
+
+    </div>
+
+    {% if request.args %}
+    <div class="active-filter">
+        Filters Applied
+    </div>
+    {% endif %}
+
+    <div id="status-updated-msg" class="active-filter" style="display:none;">
+        Updated
+    </div>
+
+    <!-- TABLE CARD -->
+    <div class="hrms-card mt-4">
+
+        <div class="attendance-table-wrap">
+
+        <table class="hrms-table">
+
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Date</th>
+                    <th>Check In</th>
+                    <th>Check Out</th>
+                    <th>Duration (HH:MM)</th>
+                    <th>Edit</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for a in attendance %}
+                <tr>
+
+                    <td>{{ a.full_name }}</td>
+
+                    <td>{{ a.attendance_date }}</td>
+
+                    <td>
+                        {{ a.check_in_time.strftime("%H:%M:%S IST") if a.check_in_time else "-" }}
+                    </td>
+
+                    <td>
+                        {{ a.check_out_time.strftime("%H:%M:%S IST") if a.check_out_time else "-" }}
+                    </td>
+
+                    <td>
+                        {% if a.duration %}
+                        {% set total_minutes = a.duration|int %}
+                        {% set hours = total_minutes // 60 %}
+                        {% set minutes = total_minutes % 60 %}
+                        {{ "%02d:%02d"|format(hours, minutes) }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        {% if not a.is_locked %}
+                        <form method="POST"
+                            class="status-edit-form"
+                            onsubmit="return saveAttendanceStatus(event, this);"
+                            action="/hrms/attendance/edit/{{ a.id }}">
+                            <select name="status">
+                                <option value="Present" {% if a.status == 'Present' %}selected{% endif %}>Present</option>
+                                <option value="Absent" {% if a.status == 'Absent' %}selected{% endif %}>Absent</option>
+                                <option value="WFH" {% if a.status == 'WFH' %}selected{% endif %}>WFH</option>
+                                <option value="Leave" {% if a.status == 'Leave' %}selected{% endif %}>Leave</option>
+                                <option value="Weekend" {% if a.status == 'Weekend' %}selected{% endif %}>Weekend</option>
+                            </select>
+                            <button type="submit">Save</button>
+                        </form>
+                        {% else %}
+                            🔒 Locked
+                        {% endif %}
+                    </td>
+
+                </tr>
+                {% endfor %}
+            </tbody>
+
+        </table>
+
+        </div>
+
+    </div>
+
+</div>
+
+<style>
+.filter-card {
+    padding: 25px;
+}
+
+.filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: end;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+}
+
+.filter-group label {
+    font-size: 13px;
+    margin-bottom: 6px;
+    color: #aaa;
+}
+
+.filter-group select,
+.filter-group input {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid #333;
+    background: #111;
+    color: white;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-filter {
+    background: linear-gradient(45deg, #3f51b5, #1a237e);
+    color: white;
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.btn-filter:hover {
+    transform: scale(1.05);
+}
+
+.btn-reset {
+    background: #333;
+    color: white;
+    padding: 8px 18px;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: 0.3s;
+}
+
+.btn-reset:hover {
+    background: #555;
+}
+
+.active-filter {
+    background: #1b5e20;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-bottom: 10px;
+    color: #a5d6a7;
+}
+
+.hrms-table tbody tr:hover {
+    background: #111827;
+    transition: 0.2s;
+}
+
+.attendance-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.attendance-table-wrap .hrms-table {
+    min-width: 760px;
+}
+
+@media (max-width: 768px) {
+    .hrms-wrapper {
+        padding: 0;
+    }
+
+    .hrms-header h2 {
+        font-size: 22px;
+    }
+
+    .filter-card {
+        padding: 16px;
+    }
+
+    .filter-form {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .filter-group {
+        min-width: 100%;
+    }
+
+    .button-group {
+        flex-direction: column;
+    }
+
+    .btn-filter,
+    .btn-reset {
+        width: 100%;
+        text-align: center;
+    }
+
+    .active-filter {
+        margin-top: 10px;
+        margin-bottom: 12px;
+    }
+
+    .attendance-table-wrap .hrms-table {
+        min-width: 680px;
+    }
+
+    .hrms-table td form {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .hrms-table td form select,
+    .hrms-table td form button {
+        width: 100%;
+    }
+
+    .hrms-table td form button {
+        padding: 10px 12px;
+    }
+}
+</style>
+
+<script>
+async function saveAttendanceStatus(e, form) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const statusSelect = form.querySelector('select[name="status"]');
+    if (!submitBtn || !statusSelect) return false;
+
+    const selectedStatus = statusSelect.value;
+    const oldText = submitBtn.textContent;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+
+    try {
+        const response = await fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Failed to save status');
+        }
+
+        statusSelect.value = data.status || selectedStatus;
+        submitBtn.textContent = 'Saved';
+
+        const updatedMsg = document.getElementById('status-updated-msg');
+        if (updatedMsg) {
+            updatedMsg.style.display = 'block';
+            clearTimeout(window.__attendanceUpdatedTimer);
+            window.__attendanceUpdatedTimer = setTimeout(() => {
+                updatedMsg.style.display = 'none';
+            }, 1400);
+        }
+
+        setTimeout(() => {
+            submitBtn.textContent = oldText;
+            submitBtn.disabled = false;
+        }, 900);
+    } catch (err) {
+        submitBtn.textContent = 'Retry';
+        submitBtn.disabled = false;
+        console.error(err);
+    }
+
+    return false;
+}
+</script>
+
+{% endblock %}
