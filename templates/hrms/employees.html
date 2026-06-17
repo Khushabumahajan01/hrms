@@ -126,6 +126,10 @@
     }
 
     /* ===== TABLE ===== */
+    .employees-table-wrap {
+        overflow-x: auto;
+    }
+    
     .hrms-table {
         width: 100%;
         border-collapse: collapse;
@@ -254,7 +258,7 @@
         color: #fff;
     }
 
-    .dropdown:hover .dropdown-content {
+    .dropdown:hover .dropdown-content, .dropdown-content.show {
         display: block;
     }
 
@@ -460,7 +464,7 @@
             </td>
             <td style="text-align:right;" onclick="event.stopPropagation();">
                 <div class="dropdown">
-                    <button class="btn-more">More ▾</button>
+                    <button class="btn-more" onclick="this.nextElementSibling.classList.toggle('show')">More ▾</button>
                     <div class="dropdown-content">
                         <a href="/hrms/employees/${emp.id}/edit">✏️ Edit Employee</a>
                         <a href="/hrms/employees/${emp.id}/profile?tab=profile">👤 View Profile</a>
@@ -469,7 +473,7 @@
                         <a href="/hrms/employees/${emp.id}/profile?tab=leaves">🌴 Leave History</a>
                         <a href="/hrms/employees/${emp.id}/profile?tab=performance">📊 Performance Evaluations</a>
                         <a href="/hrms/performance/start/${emp.id}" style="color: #38bdf8;">⭐ Start Performance Evaluation</a>
-                        <a href="/hrms/exit/manage/${emp.id}" style="color: #ef4444; border-top: 1px solid #1e293b; padding-top: 10px; margin-top: 5px;">🚪 Exit Management</a>
+                        <a href="/hrms/exit/manage/${emp.id}" style="color: #ef4444; border-top: 1px solid #1e293b; padding-top: 10px; margin-top: 5px;">🚪 Employee Exit History</a>
                     </div>
                 </div>
             </td>

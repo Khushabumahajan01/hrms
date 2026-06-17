@@ -69,12 +69,25 @@ select.form-control { appearance:none; background-image:url("data:image/svg+xml;
                     <label>Template Content (HTML)</label>
                     <textarea name="template_content" id="edit-template-content" class="form-control" rows="22" style="font-family:'Courier New',monospace; font-size:13px; line-height:1.6;"></textarea>
                 </div>
-                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 10px;">
                     <button type="submit" class="btn-primary">💾 Save Template</button>
                     <button type="button" class="btn-success" onclick="previewTemplate()">👁 Preview</button>
-                    <button type="button" class="btn-danger" onclick="deleteTemplate()">🗑 Delete Template</button>
+                    <button type="button" class="btn-danger" id="btn-delete" onclick="deleteTemplate()">🗑 Delete Template</button>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button type="button" class="btn-primary" style="background:#8b5cf6;" onclick="showVersionHistory()">📜 Version History</button>
+                    <button type="button" class="btn-primary" style="background:#f59e0b;" onclick="duplicateTemplate()">📋 Duplicate Template</button>
                 </div>
             </form>
+            
+            <!-- Version History Modal -->
+            <div id="versions-modal" class="modal-overlay">
+                <div class="modal-content" style="width: 600px;">
+                    <span class="modal-close" onclick="closeVersionsModal()">&times;</span>
+                    <h3 style="margin-top:0;">Version History</h3>
+                    <div id="versions-list" style="margin-top:20px;"></div>
+                </div>
+            </div>
             <form id="delete-form" method="POST" style="display:none;"></form>
         </div>
 
@@ -143,17 +156,24 @@ function unescapeHTML(str) {
 
 function loadTemplateForEditing() {
     const sel = document.getElementById("doc-select");
-    const opt = sel.options[sel.selectedIndex];
-    if (!opt.value) {
+    const tid = sel.value;
+    if (!tid) {
         document.getElementById("editor-section").style.display = "none";
         document.getElementById("preview-area").style.display = "none";
         return;
     }
 
-    const hiddenTpl = document.getElementById("tpl_content_" + opt.value);
-    const templateName = opt.getAttribute("data-name");
+    const btnDelete = document.getElementById("btn-delete");
+    const tName = sel.options[sel.selectedIndex].getAttribute("data-name");
+    if (["Experience Letter", "FNF Letter", "LOR"].includes(tName)) {
+        btnDelete.style.display = "none";
+    } else {
+        btnDelete.style.display = "inline-block";
+    }
 
-    document.getElementById("edit-template-name").value = templateName;
+    const hiddenTpl = document.getElementById("tpl_content_" + tid);
+    document.getElementById("edit-template-name").value = tName;
+    document.getElementById("edit-template-name").readOnly = true;
     document.getElementById("edit-template-content").value = hiddenTpl ? unescapeHTML(hiddenTpl.value) : "";
     document.getElementById("editor-section").style.display = "block";
     document.getElementById("preview-area").style.display = "none";
@@ -205,5 +225,57 @@ document.addEventListener("DOMContentLoaded", () => {
         openAddModal();
     }
 });
+
+function duplicateTemplate() {
+    const sel = document.getElementById("doc-select");
+    const tName = sel.options[sel.selectedIndex].getAttribute("data-name");
+    
+    // Instead of using the edit modal, let's open the Add modal with pre-filled content
+    const content = document.getElementById("edit-template-content").value;
+    
+    openAddModal();
+    document.getElementById("add-tpl-name").value = tName + " (Copy)";
+    document.getElementById("add-tpl-content").value = content;
+}
+
+async function showVersionHistory() {
+    const tid = document.getElementById("doc-select").value;
+    if (!tid) return;
+    
+    try {
+        const res = await fetch("/hrms/letters/templates/api/versions/" + tid);
+        const versions = await res.json();
+        
+        const list = document.getElementById("versions-list");
+        list.innerHTML = "";
+        
+        if (versions.length === 0) {
+            list.innerHTML = "<p>No version history available.</p>";
+        } else {
+            versions.forEach(v => {
+                list.innerHTML += `
+                    <div style="background:#111827; padding:15px; border-radius:6px; border:1px solid #374151; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <strong style="color:#60a5fa;">Version ${v.version_number}</strong><br>
+                            <span style="font-size:0.8rem; color:#9ca3af;">Saved on ${v.created_at} by ${v.created_by || 'System'}</span>
+                        </div>
+                        <form action="/hrms/letters/templates/restore/${v.id}" method="POST" style="margin:0;">
+                            <button type="submit" class="btn-success" style="padding:6px 12px; font-size:12px;" onclick="return confirm('Restore this version?')">Restore</button>
+                        </form>
+                    </div>
+                `;
+            });
+        }
+        
+        document.getElementById("versions-modal").style.display = "flex";
+    } catch (err) {
+        console.error(err);
+        alert("Error fetching versions.");
+    }
+}
+
+function closeVersionsModal() {
+    document.getElementById("versions-modal").style.display = "none";
+}
 </script>
 {% endblock %}

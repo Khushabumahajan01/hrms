@@ -398,12 +398,51 @@ def generate_pdf():
         pdf_url = upload_file_bytes(file_bytes, object_key)
 
         if pdf_url:
+            print("LOG: Storage upload success to", pdf_url)
             conn2, cur2 = get_db(True)
             try:
+                # Lookup uploaded_by employee_id
+                uploader_employee_id = None
+                user_id = session.get("user_id")
+                if user_id:
+                    try:
+                        cur2.execute("SELECT employee_id FROM users WHERE id = %s", (user_id,))
+                        user_rec = cur2.fetchone()
+                        if user_rec and user_rec.get("employee_id"):
+                            uploader_employee_id = user_rec["employee_id"]
+                    except Exception as e:
+                        print("Error looking up uploader employee_id:", e)
+                        
+                file_size = os.path.getsize(pdf_path) if os.path.exists(pdf_path) else 0
+                
                 cur2.execute("""
-                    INSERT INTO generated_letters (employee_id, document_type, pdf_url, generated_by)
-                    VALUES (%s, %s, %s, %s)
-                """, (emp_id, document_type, pdf_url, session.get("user", "System")))
+                    INSERT INTO generated_letters (employee_id, document_type, pdf_url, generated_by, status, pdf_path, file_size)
+                    VALUES (%s, %s, %s, %s, 'Generated', %s, %s)
+                """, (emp_id, document_type, pdf_url, session.get("user", "System"), pdf_path, file_size))
+                print("LOG: generated_letters insert success")
+
+                # Also insert into employee_documents so it shows up in Employee Profile
+                try:
+                    cur2.execute("""
+                        INSERT INTO employee_documents (employee_id, document_name, document_type, description, file_url, file_size, uploaded_by, file_name, file_path, s3_url, mime_type)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        emp_id, 
+                        f"{document_type}", 
+                        "Other", 
+                        f"System generated letter via HRMS", 
+                        pdf_url, 
+                        file_size, 
+                        uploader_employee_id, 
+                        file_name, 
+                        object_key, 
+                        pdf_url, 
+                        "application/pdf"
+                    ))
+                    print("LOG: employee_documents insert success")
+                except Exception as doc_err:
+                    print(f"Error inserting to employee_documents: {str(doc_err)}")
+                    raise doc_err
 
                 if exit_id:
                     try:
@@ -417,17 +456,12 @@ def generate_pdf():
                 if conn2:
                     release_db(conn2, cur2)
 
-        flash(f"{document_type} generated successfully! PDF has been saved to document history.", "success")
         return send_file(pdf_path, as_attachment=True, download_name=file_name)
 
     except Exception as e:
         print("PDF Generation Error:", e)
         import traceback; traceback.print_exc()
-        flash(f"Failed to generate PDF: {str(e)}", "error")
-
-    if exit_id:
-        return redirect(f"/hrms/exit/manage/{emp_id}")
-    return redirect("/hrms/letters/history")
+        return str(e), 500
 
 
 # ─── Document History ─────────────────────────────────────────────────────────
@@ -436,21 +470,56 @@ def generate_pdf():
 @login_required
 @role_required(["HR", "Admin"])
 def letters_history():
-    conn, cur = get_db()
+    conn, cur = get_db(True)
     if not conn:
         return redirect("/dashboard")
     try:
-        cur.execute("""
+        emp_filter = request.args.get("emp", "")
+        doc_filter = request.args.get("doc", "")
+        date_filter = request.args.get("date", "")
+
+        query = """
             SELECT gl.*, e.full_name, e.employee_code
             FROM generated_letters gl
             JOIN hrms_employees e ON gl.employee_id = e.id
-            ORDER BY gl.generated_at DESC
-        """)
+            WHERE 1=1
+        """
+        params = []
+        if emp_filter:
+            query += " AND e.id = %s"
+            params.append(emp_filter)
+        if doc_filter:
+            query += " AND gl.document_type = %s"
+            params.append(doc_filter)
+        if date_filter:
+            query += " AND DATE(gl.generated_at) = %s"
+            params.append(date_filter)
+
+        query += " ORDER BY gl.generated_at DESC"
+        cur.execute(query, tuple(params))
         letters = cur.fetchall()
-        return render_template("hrms/letters/history.html", letters=letters)
+
+        cur.execute("SELECT id, full_name, employee_code FROM hrms_employees ORDER BY full_name")
+        employees = cur.fetchall()
+
+        cur.execute("SELECT DISTINCT document_type FROM generated_letters ORDER BY document_type")
+        doc_types = [r["document_type"] for r in cur.fetchall()]
+
+        # Calculate statistics
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN document_type = 'Experience Letter' THEN 1 ELSE 0 END) as exp_count,
+                SUM(CASE WHEN document_type = 'FNF Letter' THEN 1 ELSE 0 END) as fnf_count,
+                SUM(CASE WHEN document_type = 'LOR' THEN 1 ELSE 0 END) as lor_count
+            FROM generated_letters
+        """)
+        stats = cur.fetchone()
+
+        return render_template("hrms/letters/history.html", letters=letters, employees=employees, doc_types=doc_types, stats=stats)
     except Exception as e:
         print("History error:", e)
-        return render_template("hrms/letters/history.html", letters=[])
+        return render_template("hrms/letters/history.html", letters=[], employees=[], doc_types=[], stats={})
     finally:
         release_db(conn, cur)
 

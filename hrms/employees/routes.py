@@ -578,38 +578,58 @@ def upload_document_to_supabase(file_storage, employee_id):
     if not file_storage or not file_storage.filename:
         return None
 
-    supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
-    supabase_key = os.getenv("SUPABASE_KEY")
-    if not supabase_url or not supabase_key:
-        return None # No local fallback required for this enhancement request
-
+    from flask import current_app
     safe_name = secure_filename(file_storage.filename)
     timestamp = int(datetime.now().timestamp())
     object_key = f"documents/emp_{employee_id}_{timestamp}_{safe_name}"
-
-    file_storage.stream.seek(0)
-    file_bytes = file_storage.read()
-    file_storage.stream.seek(0)
-
     content_type = file_storage.mimetype or "application/octet-stream"
-    bucket = os.getenv("SUPABASE_RESUME_BUCKET", "resumes")
-    upload_url = f"{supabase_url}/storage/v1/object/{bucket}/{object_key}"
-    headers = {
-        "apikey": supabase_key,
-        "Authorization": f"Bearer {supabase_key}",
-        "Content-Type": content_type,
-        "x-upsert": "false"
-    }
 
-    response = httpx.post(upload_url, content=file_bytes, headers=headers, timeout=30.0)
-    if response.status_code not in (200, 201):
-        raise RuntimeError(f"Supabase upload failed with status {response.status_code}")
+    supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    
+    # Try Supabase first if configured
+    if supabase_url and supabase_key:
+        try:
+            file_storage.stream.seek(0)
+            file_bytes = file_storage.read()
+            file_storage.stream.seek(0)
 
-    public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{object_key}"
+            bucket = os.getenv("SUPABASE_RESUME_BUCKET", "resumes")
+            upload_url = f"{supabase_url}/storage/v1/object/{bucket}/{object_key}"
+            headers = {
+                "apikey": supabase_key,
+                "Authorization": f"Bearer {supabase_key}",
+                "Content-Type": content_type,
+                "x-upsert": "false"
+            }
+
+            response = httpx.post(upload_url, content=file_bytes, headers=headers, timeout=30.0)
+            if response.status_code in (200, 201):
+                public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{object_key}"
+                return {
+                    "file_name": safe_name,
+                    "file_path": object_key,
+                    "bucket_name": bucket,
+                    "public_url": public_url,
+                    "mime_type": content_type
+                }
+        except Exception as e:
+            print("Supabase upload failed, falling back to local:", e)
+
+    # Local Fallback
+    local_filename = f"emp_{employee_id}_{timestamp}_{safe_name}"
+    docs_dir = os.path.join(current_app.root_path, "uploads", "docs")
+    os.makedirs(docs_dir, exist_ok=True)
+    
+    file_storage.stream.seek(0)
+    file_storage.save(os.path.join(docs_dir, local_filename))
+    
+    public_url = f"/hrms/employees/documents/download_local/{local_filename}"
+    
     return {
         "file_name": safe_name,
-        "file_path": object_key,
-        "bucket_name": bucket,
+        "file_path": local_filename,
+        "bucket_name": "local",
         "public_url": public_url,
         "mime_type": content_type
     }
@@ -657,7 +677,6 @@ def upload_document():
         from flask import flash
         flash("File exceeds 5MB limit.", "error")
         return redirect("/hrms/employees/my-documents")
-
     try:
         res = upload_document_to_supabase(file_attachment, employee_id)
         if not res:
@@ -677,6 +696,13 @@ def upload_document():
         flash(f"Upload failed: {e}", "error")
 
     return redirect("/hrms/employees/my-documents")
+
+@employees_bp.route("/documents/download_local/<filename>")
+@login_required
+def download_local_document(filename):
+    from flask import current_app, send_from_directory
+    docs_dir = os.path.join(current_app.root_path, "uploads", "docs")
+    return send_from_directory(docs_dir, filename, as_attachment=True)
 
 @employees_bp.route("/documents/<doc_id>/view", methods=["GET"])
 @login_required

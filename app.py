@@ -1157,54 +1157,86 @@ def settings():
     message_type = "success"
     
     if request.method == "POST":
-        old_password = request.form.get("old_password", "").strip()
-        new_password = request.form.get("new_password", "").strip()
-        confirm_password = request.form.get("confirm_password", "").strip()
-        
-        # Validation
-        if not old_password or not new_password or not confirm_password:
-            message = "All fields are required"
-            message_type = "error"
-        elif new_password != confirm_password:
-            message = "New passwords do not match"
-            message_type = "error"
-        elif len(new_password) < 6:
-            message = "Password must be at least 6 characters"
-            message_type = "error"
-        else:
-            user_id = session.get("user_id")
-            conn, cur = get_db(True)
-
-            cur.execute("SELECT password, email FROM hrms_users WHERE id = %s", (user_id,))
-            user = cur.fetchone()
-
-            # Some legacy rows may store plain text; accept once and upgrade to hash.
-            is_old_password_valid = False
-            if user:
-                stored_password = user["password"] or ""
-                is_old_password_valid = (
-                    check_password_hash(stored_password, old_password)
-                    if stored_password.startswith("pbkdf2:") or stored_password.startswith("scrypt:")
-                    else stored_password == old_password
-                )
-
-            if user and is_old_password_valid:
-                # Password is correct, update it
-                hashed_password = generate_password_hash(new_password)
-                cur.execute(
-                    "UPDATE hrms_users SET password = %s WHERE id = %s",
-                    (hashed_password, user_id)
-                )
-                conn.commit()
-                message = "Password updated successfully!"
+        if "logo_file" in request.files:
+            file = request.files["logo_file"]
+            if file and file.filename:
+                import os, time
+                from werkzeug.utils import secure_filename
+                safe_name = secure_filename(file.filename)
+                local_filename = f"logo_{int(time.time())}_{safe_name}"
+                uploads_dir = os.path.join(app.root_path, "static", "uploads")
+                os.makedirs(uploads_dir, exist_ok=True)
+                file.save(os.path.join(uploads_dir, local_filename))
+                
+                logo_url = f"/static/uploads/{local_filename}"
+                conn, cur = get_db(True)
+                try:
+                    cur.execute("SELECT id FROM company_settings LIMIT 1")
+                    if cur.fetchone():
+                        cur.execute("UPDATE company_settings SET logo_url = %s", (logo_url,))
+                    else:
+                        cur.execute("INSERT INTO company_settings (logo_url) VALUES (%s)", (logo_url,))
+                    conn.commit()
+                finally:
+                    release_db(conn, cur)
+                message = "Company logo updated successfully!"
                 message_type = "success"
-            else:
-                message = "Old password is incorrect"
-                message_type = "error"
+        else:
+            old_password = request.form.get("old_password", "").strip()
+            new_password = request.form.get("new_password", "").strip()
+            confirm_password = request.form.get("confirm_password", "").strip()
             
-            release_db(conn, cur)
-    
-    return render_template("settings.html", message=message, message_type=message_type)
+            # Validation
+            if not old_password or not new_password or not confirm_password:
+                message = "All fields are required"
+                message_type = "error"
+            elif new_password != confirm_password:
+                message = "New passwords do not match"
+                message_type = "error"
+            elif len(new_password) < 6:
+                message = "Password must be at least 6 characters"
+                message_type = "error"
+            else:
+                user_id = session.get("user_id")
+                conn, cur = get_db(True)
+                try:
+                    cur.execute("SELECT password, email FROM hrms_users WHERE id = %s", (user_id,))
+                    user = cur.fetchone()
+
+                    is_old_password_valid = False
+                    if user:
+                        stored_password = user["password"] or ""
+                        is_old_password_valid = (
+                            check_password_hash(stored_password, old_password)
+                            if stored_password.startswith("pbkdf2:") or stored_password.startswith("scrypt:")
+                            else stored_password == old_password
+                        )
+
+                    if user and is_old_password_valid:
+                        hashed_password = generate_password_hash(new_password)
+                        cur.execute(
+                            "UPDATE hrms_users SET password = %s WHERE id = %s",
+                            (hashed_password, user_id)
+                        )
+                        conn.commit()
+                        message = "Password updated successfully!"
+                        message_type = "success"
+                    else:
+                        message = "Old password is incorrect"
+                        message_type = "error"
+                finally:
+                    release_db(conn, cur)
+
+    conn, cur = get_db(True)
+    try:
+        cur.execute("SELECT logo_url FROM company_settings LIMIT 1")
+        company = cur.fetchone()
+    except Exception:
+        company = None
+    finally:
+        release_db(conn, cur)
+
+    return render_template("settings.html", message=message, message_type=message_type, company=company)
 
 @app.route("/salary-records")
 @login_required
