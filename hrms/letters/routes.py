@@ -182,7 +182,8 @@ def generator():
 @letters_bp.route("/api/employee/<int:emp_id>")
 @login_required
 def api_get_employee(emp_id):
-    conn, cur = get_db()
+    print(f"SERVER LOG: Employee selected (ID: {emp_id})")
+    conn, cur = get_db(True)
     if not conn:
         return jsonify({"error": "DB error"}), 500
     try:
@@ -198,8 +199,10 @@ def api_get_employee(emp_id):
         """, (emp_id,))
         emp = cur.fetchone()
         if not emp:
+            print(f"SERVER LOG: Employee not found (ID: {emp_id})")
             return jsonify({"error": "Not found"}), 404
 
+        print(f"SERVER LOG: Employee found: {emp['full_name']}")
         result = {}
         for k, v in emp.items():
             if isinstance(v, (date, datetime)):
@@ -232,8 +235,9 @@ def api_get_employee(emp_id):
 
         # Company info
         company = _get_company(cur)
-        result["_company_name"] = company.get("company_name", "ANTI.AI PRIVATE LIMITED")
+        result["_company_name"] = "ANTI.AI PRIVATE LIMITED"
 
+        print("SERVER LOG: Data returned to frontend:", result)
         return jsonify(result)
     except Exception as e:
         print("API employee error:", e)

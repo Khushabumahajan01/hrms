@@ -232,6 +232,8 @@ async function autoFillEmployee() {
 function applyEmployeeData() {
     if (!employeeData || employeeData.error) return;
     const d = employeeData;
+    
+    console.log("BROWSER CONSOLE: API response payload", d);
 
     const mapping = {
         "Employee_Name": d.full_name,
@@ -255,10 +257,18 @@ function applyEmployeeData() {
 
     const readonlyFields = ["Employee_Name", "Employee_ID", "Department", "Designation", "Joining_Date", "Email", "Employment_Status", "Company_Name"];
 
+    let mappingResults = {};
+
     for (const [key, value] of Object.entries(mapping)) {
         const input = document.getElementById("ph_" + key);
         if (input) {
-            if (value) input.value = value;
+            if (value) {
+                input.value = value;
+                mappingResults[key] = "Success: " + value;
+            } else {
+                mappingResults[key] = "Warning: Value missing from DB";
+                console.warn(`WARNING: Missing field mapping\n* Employee ID selected: ${d.id}\n* SQL query executed: SELECT e.*, m.full_name AS manager_name, r.role_name FROM hrms_employees e LEFT JOIN hrms_roles r ON e.role_id = r.id LEFT JOIN hrms_employees m ON e.manager_id = m.id WHERE e.id = ${d.id}\n* API response returned:`, d, `\n* Missing field name: ${key}`);
+            }
             if (readonlyFields.includes(key) && input.value) {
                 input.readOnly = true;
                 input.style.backgroundColor = "#1f2937";
@@ -266,6 +276,8 @@ function applyEmployeeData() {
             }
         }
     }
+    
+    console.log("BROWSER CONSOLE: Field mapping results", mappingResults);
 }
 
 function validateFields() {
