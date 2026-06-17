@@ -4,7 +4,8 @@ from utils.db import get_db, release_db
 
 exit_bp = Blueprint("exit_bp", __name__, url_prefix="/hrms/exit")
 
-@exit_bp.route("/manage/<int:emp_id>")
+# FIX: Removed <int:> from <emp_id>
+@exit_bp.route("/manage/<emp_id>")
 @login_required
 @role_required(["HR", "Admin"])
 def manage_exit(emp_id):
@@ -85,7 +86,8 @@ def initiate_exit():
     return redirect(f"/hrms/exit/manage/{emp_id}")
 
 
-@exit_bp.route("/update_status/<int:exit_id>", methods=["POST"])
+# FIX: Removed <int:> from <exit_id>
+@exit_bp.route("/update_status/<exit_id>", methods=["POST"])
 @login_required
 @role_required(["HR", "Admin"])
 def update_status(exit_id):
@@ -109,7 +111,8 @@ def update_status(exit_id):
     return redirect(f"/hrms/exit/manage/{emp_id}")
 
 
-@exit_bp.route("/save_fnf/<int:exit_id>", methods=["POST"])
+# FIX: Removed <int:> from <exit_id>
+@exit_bp.route("/save_fnf/<exit_id>", methods=["POST"])
 @login_required
 @role_required(["HR", "Admin"])
 def save_fnf(exit_id):

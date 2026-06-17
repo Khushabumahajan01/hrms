@@ -69,11 +69,63 @@
 .rating-table td {
     text-align: center;
 }
-.radio-cell input {
+/* Custom Numeric Rating Grid */
+.rating-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
-    width: 18px;
-    height: 18px;
-    accent-color: #38bdf8;
+    position: relative;
+    width: 36px;
+    height: 36px;
+    margin: 0 auto;
+}
+
+.rating-label input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.rating-num {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.03);
+    color: #9ca3af;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.05);
+}
+
+/* Hover effect for active/writable ratings */
+.rating-label:hover .rating-num {
+    border-color: rgba(56, 189, 248, 0.5);
+    color: #fff;
+    background: rgba(56, 189, 248, 0.08);
+    transform: scale(1.08);
+}
+
+/* Checked status */
+.rating-label input[type="radio"]:checked + .rating-num {
+    background: linear-gradient(135deg, #38bdf8, #6366f1);
+    border-color: transparent;
+    color: #0b0f19;
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.45);
+    transform: scale(1.1);
+}
+
+/* Highlight the whole table cell when checked */
+.radio-cell.selected-rating {
+    background: rgba(56, 189, 248, 0.05) !important;
+    box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.2) !important;
+    transition: background-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .summary-grid {
@@ -135,6 +187,23 @@
 .btn-submit:hover {
     background: #2563eb;
 }
+.rating-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    border: 1px solid #1f2937;
+}
+@media (max-width: 768px) {
+    .summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+@media (max-width: 480px) {
+    .summary-grid {
+        grid-template-columns: 1fr;
+    }
+}
 </style>
 
 <div class="eval-wrapper">
@@ -182,49 +251,63 @@
         <!-- TECHNICAL & WORK PERFORMANCE -->
         <div class="card">
             <h2 class="card-title">Technical & Work Performance</h2>
-            <table class="rating-table">
-                <thead>
-                    <tr>
-                        <th>Category</th>
-                        <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% set tech_categories = ['Job Knowledge', 'Work Quality', 'Attendance & Punctuality', 'Initiative', 'Communication', 'Listening Skills', 'Dependability', 'Mentoring & Guiding'] %}
-                    {% for cat in tech_categories %}
-                    <tr>
-                        <td>{{ cat }}</td>
-                        {% for i in range(1, 6) %}
-                        <td class="radio-cell"><input type="radio" name="rating_{{ cat }}" value="{{ i }}" required onchange="calculateScore()"></td>
+            <div class="rating-table-wrap">
+                <table class="rating-table">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set tech_categories = ['Job Knowledge', 'Work Quality', 'Attendance & Punctuality', 'Initiative', 'Communication', 'Listening Skills', 'Dependability', 'Mentoring & Guiding'] %}
+                        {% for cat in tech_categories %}
+                        <tr>
+                            <td>{{ cat }}</td>
+                            {% for i in range(1, 6) %}
+                            <td class="radio-cell">
+                                <label class="rating-label">
+                                    <input type="radio" name="rating_{{ cat }}" value="{{ i }}" required onchange="calculateScore()">
+                                    <span class="rating-num">{{ i }}</span>
+                                </label>
+                            </td>
+                            {% endfor %}
+                        </tr>
                         {% endfor %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- PROFESSIONAL SKILLS -->
         <div class="card">
             <h2 class="card-title">Professional Skills</h2>
-            <table class="rating-table">
-                <thead>
-                    <tr>
-                        <th>Category</th>
-                        <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% set prof_categories = ['Organization Skills', 'Code of Conduct', 'Discipline', 'Problem Solving Ability', 'Adaptability', 'Professionalism', 'Self Confidence', 'Collaboration Skills', 'Analytical Skills', 'Culture Fit', 'Conflict Resolution', 'Innovative Solutions', 'Quality of Output', 'Business Impact', 'Role Competency'] %}
-                    {% for cat in prof_categories %}
-                    <tr>
-                        <td>{{ cat }}</td>
-                        {% for i in range(1, 6) %}
-                        <td class="radio-cell"><input type="radio" name="rating_{{ cat }}" value="{{ i }}" required onchange="calculateScore()"></td>
+            <div class="rating-table-wrap">
+                <table class="rating-table">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set prof_categories = ['Organization Skills', 'Code of Conduct', 'Discipline', 'Problem Solving Ability', 'Adaptability', 'Professionalism', 'Self Confidence', 'Collaboration Skills', 'Analytical Skills', 'Culture Fit', 'Conflict Resolution', 'Innovative Solutions', 'Quality of Output', 'Business Impact', 'Role Competency'] %}
+                        {% for cat in prof_categories %}
+                        <tr>
+                            <td>{{ cat }}</td>
+                            {% for i in range(1, 6) %}
+                            <td class="radio-cell">
+                                <label class="rating-label">
+                                    <input type="radio" name="rating_{{ cat }}" value="{{ i }}" required onchange="calculateScore()">
+                                    <span class="rating-num">{{ i }}</span>
+                                </label>
+                            </td>
+                            {% endfor %}
+                        </tr>
                         {% endfor %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- SUMMARY CALCULATION -->
@@ -372,5 +455,21 @@ function calculateScore() {
 
 // init
 toggleManagerScore();
+
+// Dynamic cell highlighting
+document.querySelectorAll('input[type="radio"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        const row = this.closest('tr');
+        if (row) {
+            row.querySelectorAll('.radio-cell').forEach(cell => {
+                cell.classList.remove('selected-rating');
+            });
+        }
+        if (this.checked) {
+            const cell = this.closest('.radio-cell');
+            if (cell) cell.classList.add('selected-rating');
+        }
+    });
+});
 </script>
 {% endblock %}

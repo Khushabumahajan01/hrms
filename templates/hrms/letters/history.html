@@ -25,7 +25,13 @@
 .empty-state p { font-size:1.1rem; margin-bottom:15px; }
 </style>
 
-<div class="hist-container">
+<div class="hist-container" style="max-width: 1000px;">
+    <div class="letters-tabs" style="display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 1px solid #1f2937; padding-bottom: 15px;">
+        <a href="/hrms/letters/generator" style="padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: 500; color: #9ca3af; background: rgba(255,255,255,0.02);">Generate Letter</a>
+        <a href="/hrms/letters/history" style="padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: 600; background: #3b82f6; color: white;">Document History</a>
+        <a href="/hrms/letters/templates" style="padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: 500; color: #9ca3af; background: rgba(255,255,255,0.02);">Template Editor</a>
+    </div>
+
     <div class="hist-header">
         <h2>Document History</h2>
         <a href="/hrms/letters/generator" class="btn-primary">📄 Generate New Document</a>

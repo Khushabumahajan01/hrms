@@ -2,9 +2,7 @@
 
 {% block content %}
 <style>
-.gen-container { display:flex; max-width:1400px; margin:0 auto; padding:20px; gap:20px; color:#e5e7eb; }
-.gen-main { flex:3; }
-.gen-sidebar { flex:1; display:flex; flex-direction:column; gap:15px; }
+.gen-container { max-width:1000px; margin:0 auto; padding:20px; color:#e5e7eb; }
 .gen-card { background:#111827; border:1px solid #1f2937; border-radius:8px; padding:20px; }
 .form-group { margin-bottom:15px; }
 .form-group label { display:block; font-size:0.85rem; color:#9ca3af; margin-bottom:5px; }
@@ -37,77 +35,57 @@ select.form-control { appearance:none; background-image:url("data:image/svg+xml;
 <div class="toast" id="toast-msg"></div>
 
 <div class="gen-container">
-    <div class="gen-main">
-        <h2 style="margin-bottom:20px;">Generate Letter</h2>
+    <div class="letters-tabs" style="display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 1px solid #1f2937; padding-bottom: 15px;">
+        <a href="/hrms/letters/generator" style="padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: 600; background: #3b82f6; color: white;">Generate Letter</a>
+        <a href="/hrms/letters/history" style="padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: 500; color: #9ca3af; background: rgba(255,255,255,0.02);">Document History</a>
+        <a href="/hrms/letters/templates" style="padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: 500; color: #9ca3af; background: rgba(255,255,255,0.02);">Template Editor</a>
+    </div>
 
-        <div class="gen-card" style="margin-bottom:20px;">
-            <div class="form-group">
-                <label>Document Type *</label>
-                <select id="doc-select" class="form-control" style="background-color:#1e3a8a; border-color:#3b82f6;" onchange="loadTemplate()">
-                    <option value="">Select Document Type...</option>
-                    {% for t in templates %}
-                    <option value="{{ t.template_name }}">{{ t.template_name }}</option>
-                    {% endfor %}
-                </select>
+    <h2 style="margin-bottom:20px;">Generate Letter</h2>
+
+    <div class="gen-card" style="margin-bottom:20px;">
+        <div class="form-group">
+            <label>Document Type *</label>
+            <select id="doc-select" class="form-control" style="background-color:#1e3a8a; border-color:#3b82f6;" onchange="loadTemplate()">
+                <option value="">Select Document Type...</option>
                 {% for t in templates %}
-                <input type="hidden" id="tpl_{{ t.template_name | replace(' ', '_') }}" value="{{ t.template_content | e }}">
+                <option value="{{ t.template_name }}">{{ t.template_name }}</option>
                 {% endfor %}
-            </div>
-
-            <div class="form-group">
-                <label>Select Employee *</label>
-                <select id="emp-select" class="form-control" onchange="autoFillEmployee()">
-                    <option value="">Select Employee...</option>
-                    {% for e in employees %}
-                    <option value="{{ e.id }}" data-code="{{ e.employee_code }}" data-name="{{ e.full_name }}" data-dept="{{ e.department }}" data-desg="{{ e.designation }}" data-join="{{ e.joining_date }}">{{ e.full_name }} ({{ e.employee_code or e.id }})</option>
-                    {% endfor %}
-                </select>
-            </div>
+            </select>
+            {% for t in templates %}
+            <input type="hidden" id="tpl_{{ t.template_name | replace(' ', '_') }}" value="{{ t.template_content | e }}">
+            {% endfor %}
         </div>
 
-        <div id="builder-section" class="gen-card" style="display:none;">
-            <h4 style="margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #1f2937; color:#60a5fa;">Fill Placeholders</h4>
-            <p style="font-size:0.8rem; color:#6b7280; margin-bottom:15px;">Fields marked with a 🔒 are auto-filled from employee data. You can still override them manually.</p>
-
-            <div style="background:#1f2937; padding:10px 15px; border-radius:6px; display:grid; grid-template-columns:200px 1fr; font-weight:600; color:#9ca3af; margin-bottom:15px;">
-                <div>Placeholder</div>
-                <div>Value</div>
-            </div>
-
-            <div id="placeholders-container"></div>
-
-            <form action="/hrms/letters/generate_pdf" method="POST" id="generate-form" style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">
-                <input type="hidden" name="html_content" id="final-html-content">
-                <input type="hidden" name="document_type" id="final-doc-type">
-                <input type="hidden" name="employee_id" id="final-emp-id">
-                <button type="button" class="btn-success" onclick="generateDocument(false)">📄 Generate PDF</button>
-                <button type="button" class="btn-secondary" onclick="generateDocument(true)">👁 Preview Letter</button>
-            </form>
+        <div class="form-group">
+            <label>Select Employee *</label>
+            <select id="emp-select" class="form-control" onchange="autoFillEmployee()">
+                <option value="">Select Employee...</option>
+                {% for e in employees %}
+                <option value="{{ e.id }}" data-code="{{ e.employee_code }}" data-name="{{ e.full_name }}" data-dept="{{ e.department }}" data-desg="{{ e.designation }}" data-join="{{ e.joining_date }}">{{ e.full_name }} ({{ e.employee_code or e.id }})</option>
+                {% endfor %}
+            </select>
         </div>
     </div>
 
-    <div class="gen-sidebar">
-        <a href="/hrms/letters/history" class="action-box">
-            <div>
-                <div style="font-weight:600; margin-bottom:5px;">Document History</div>
-                <div style="font-size:0.8rem; color:#9ca3af;">View all generated PDFs</div>
-            </div>
-            <div class="action-icon">📜</div>
-        </a>
-        <a href="/hrms/letters/templates" class="action-box">
-            <div>
-                <div style="font-weight:600; margin-bottom:5px;">Edit Template</div>
-                <div style="font-size:0.8rem; color:#9ca3af;">View or edit the template</div>
-            </div>
-            <div class="action-icon">✏️</div>
-        </a>
-        <a href="/hrms/letters/templates?add=true" class="action-box">
-            <div>
-                <div style="font-weight:600; margin-bottom:5px;">Add Letter</div>
-                <div style="font-size:0.8rem; color:#9ca3af;">Add a new letter template!</div>
-            </div>
-            <div class="action-icon">➕</div>
-        </a>
+    <div id="builder-section" class="gen-card" style="display:none;">
+        <h4 style="margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #1f2937; color:#60a5fa;">Fill Placeholders</h4>
+        <p style="font-size:0.8rem; color:#6b7280; margin-bottom:15px;">Fields marked with a 🔒 are auto-filled from employee data. You can still override them manually.</p>
+
+        <div style="background:#1f2937; padding:10px 15px; border-radius:6px; display:grid; grid-template-columns:200px 1fr; font-weight:600; color:#9ca3af; margin-bottom:15px;">
+            <div>Placeholder</div>
+            <div>Value</div>
+        </div>
+
+        <div id="placeholders-container"></div>
+
+        <form action="/hrms/letters/generate_pdf" method="POST" id="generate-form" style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">
+            <input type="hidden" name="html_content" id="final-html-content">
+            <input type="hidden" name="document_type" id="final-doc-type">
+            <input type="hidden" name="employee_id" id="final-emp-id">
+            <button type="button" class="btn-success" onclick="generateDocument(false)">📄 Generate PDF</button>
+            <button type="button" class="btn-secondary" onclick="generateDocument(true)">👁 Preview Letter</button>
+        </form>
     </div>
 </div>
 

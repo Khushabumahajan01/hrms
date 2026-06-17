@@ -165,9 +165,9 @@
             <tbody>
                 {% for doc in documents %}
                 <tr>
-                    <td>{{ doc.document_name }}</td>
+                    <td>{{ doc.document_title }}</td>
                     <td>{{ doc.document_type }}</td>
-                    <td>{{ doc.uploaded_at.strftime('%Y-%m-%d') if doc.uploaded_at else 'N/A' }}</td>
+                    <td>{{ doc.created_at.strftime('%Y-%m-%d') if doc.created_at else 'N/A' }}</td>
                     <td>
                         <span class="grade-badge" style="background: rgba(255,255,255,0.1); color: #fff;">{{
                             doc.verification_status or 'Pending' }}</span>
@@ -224,10 +224,9 @@
         {% if salary %}
         <div
             style="display:grid; grid-template-columns:1fr 1fr; gap:20px; color:#d1d5db; background:#1f2937; padding:20px; border-radius:8px;">
-            <div><strong>Base Salary:</strong> ${{ salary.base_salary or 0 }}</div>
-            <div><strong>Template:</strong> {{ salary.template_name or 'N/A' }}</div>
-            <div><strong>Last Updated:</strong> {{ salary.updated_at.strftime('%Y-%m-%d') if salary.updated_at else
-                'N/A' }}</div>
+            <div><strong>Monthly Salary:</strong> ₹{{ salary.monthly_salary or 0 }}</div>
+            <div><strong>Annual CTC:</strong> ₹{{ salary.annual_ctc or 0 }}</div>
+            <div><strong>Effective From:</strong> {{ salary.effective_from or 'N/A' }}</div>
             <div><strong>Status:</strong> <span style="color:#22c55e;">Active</span></div>
         </div>
         {% else %}
@@ -324,7 +323,7 @@
     {% if evals %}
     const ctx = document.getElementById('performanceChart').getContext('2d');
     const labels = [{% for ev in evals | reverse %}'{{ ev.evaluation_month }}/{{ ev.evaluation_year }}', {% endfor %}];
-    const data = [{% for ev in evals | reverse %}{ { ev.final_score } }, {% endfor %}];
+    const data = [{% for ev in evals | reverse %}{{ ev.final_score }}, {% endfor %}];
 
     new Chart(ctx, {
         type: 'line',

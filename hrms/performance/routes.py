@@ -18,16 +18,48 @@ def performance_ui():
     if not hr_admin_required():
         return redirect("/dashboard")
 
+    evaluations = []
+    employees = []
     try:
         conn, cur = get_db(True)
-        # Fetch upcoming, pending, evaluated this month
+        # Fetch all evaluations with employee details
+        cur.execute("""
+            SELECT p.id, p.status, p.evaluation_month, p.evaluation_year, p.final_score,
+                   e.full_name, e.employee_code, e.department, e.designation,
+                   COALESCE(e2.full_name, 'HR Admin') as evaluator_name
+            FROM performance_evaluations p
+            JOIN hrms_employees e ON p.employee_id = e.id
+            LEFT JOIN hrms_users u ON p.evaluator_id = u.id
+            LEFT JOIN hrms_employees e2 ON u.employee_id = e2.id
+            ORDER BY p.evaluation_year DESC, p.evaluation_month DESC, p.id DESC
+        """)
+        evaluations = cur.fetchall()
+
+        # Fetch active/inactive employees list for starting new evaluation dropdown
+        cur.execute("""
+            SELECT id, full_name, employee_code, department, designation
+            FROM hrms_employees
+            WHERE status != 'Deleted'
+            ORDER BY full_name
+        """)
+        employees = cur.fetchall()
+
         release_db(conn, cur)
     except Exception as e:
         print(f"Error fetching performance: {e}")
+        if 'conn' in locals():
+            try:
+                release_db(conn, cur)
+            except Exception:
+                pass
 
-    return render_template("hrms/performance_history.html")
+    return render_template(
+        "hrms/performance_history.html",
+        evaluations=evaluations,
+        employees=employees
+    )
 
-@performance_bp.route("/start/<int:employee_id>", methods=["GET"])
+@performance_bp.route("/start/<employee_id>", methods=["GET"])
 @login_required
 def start_evaluation(employee_id):
     if not hr_admin_required():
@@ -66,7 +98,7 @@ def start_evaluation(employee_id):
         print(f"Error loading evaluation form: {e}")
         return redirect("/hrms/employees/ui")
 
-@performance_bp.route("/save/<int:employee_id>", methods=["POST"])
+@performance_bp.route("/save/<employee_id>", methods=["POST"])
 @login_required
 def save_evaluation(employee_id):
     if not hr_admin_required():
@@ -139,7 +171,7 @@ def save_evaluation(employee_id):
         print(f"Error saving evaluation: {e}")
         return redirect(f"/hrms/performance/start/{employee_id}")
 
-@performance_bp.route("/update/<int:eval_id>", methods=["POST"])
+@performance_bp.route("/update/<eval_id>", methods=["POST"])
 @login_required
 def update_evaluation(eval_id):
     if not hr_admin_required():
@@ -196,7 +228,7 @@ def update_evaluation(eval_id):
         print(f"Error updating evaluation: {e}")
         return redirect(f"/hrms/performance/view/{eval_id}")
 
-@performance_bp.route("/acknowledge/<int:eval_id>", methods=["POST"])
+@performance_bp.route("/acknowledge/<eval_id>", methods=["POST"])
 @login_required
 def acknowledge_evaluation(eval_id):
     try:
@@ -238,7 +270,7 @@ def my_evaluations():
 
     return render_template("hrms/my_evaluations.html", evals=evals)
 
-@performance_bp.route("/view/<int:eval_id>", methods=["GET"])
+@performance_bp.route("/view/<eval_id>", methods=["GET"])
 @login_required
 def view_evaluation(eval_id):
     conn, cur = get_db(True)
@@ -275,39 +307,38 @@ def view_evaluation(eval_id):
 
     return render_template("hrms/view_evaluation.html", eval=evaluation, ratings=ratings, pip=pip)
 
-@performance_bp.route("/export/<int:eval_id>", methods=["GET"])
+@performance_bp.route("/export/<eval_id>", methods=["GET"])
 @login_required
 def export_evaluation(eval_id):
-    import httpx
-    from playwright.sync_api import sync_playwright
     import tempfile
     
-    conn, cur = get_db(True)
+    conn = None
+    cur = None
     try:
+        conn, cur = get_db(True)
         cur.execute("SELECT employee_id, evaluation_cycle, evaluation_year FROM performance_evaluations WHERE id = %s", (eval_id,))
         eval_record = cur.fetchone()
         if not eval_record:
+            release_db(conn, cur)
             return "Evaluation not found", 404
         
         # Check permissions
         if session.get("role") == "Employee" and eval_record["employee_id"] != session.get("employee_id"):
+            release_db(conn, cur)
             return "Unauthorized", 403
             
         employee_id = eval_record["employee_id"]
         cycle = eval_record["evaluation_cycle"]
         year = eval_record["evaluation_year"]
         
+        # Try importing Playwright
+        import httpx
+        from playwright.sync_api import sync_playwright
+        
         # Generate PDF with Playwright
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
-            
-            # Since this is a protected route, we need to pass session cookie or use a secret token
-            # A simpler way is to just generate the HTML string and set it as content
-            
-            # We will fetch the HTML directly by calling the view_evaluation route internally
-            # But wait, we can't easily mock the request context. 
-            # Best way: pass the session cookie.
             
             domain = request.host
             cookie_name = "session"
@@ -351,15 +382,17 @@ def export_evaluation(eval_id):
         
         if response.status_code in (200, 201):
             public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{object_key}"
-            
-            # Update DB with PDF URL (assuming we had a pdf_url field, but since we don't, we can add it or just redirect to the public URL)
             return redirect(public_url)
         else:
-            return f"Failed to upload PDF: {response.text}", 500
+            raise RuntimeError(f"Supabase upload failed: {response.text}")
             
     except Exception as e:
-        print(f"Error generating PDF: {e}")
-        return f"Error generating PDF: {e}", 500
+        print(f"Error generating PDF, executing browser print fallback: {e}")
+        flash("PDF generation service is currently offline. We have loaded the printer-friendly version. Press Ctrl+P (Cmd+P) to print/save as PDF.", "info")
+        return redirect(url_for("performance_bp.view_evaluation", eval_id=eval_id) + "?print=1")
     finally:
-        release_db(conn, cur)
-
+        if conn and cur:
+            try:
+                release_db(conn, cur)
+            except Exception:
+                pass

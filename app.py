@@ -375,19 +375,113 @@ def dashboard():
     if role == "Employee":
         emp_id = session.get("employee_id")
         letters = []
+        today_attendance = None
+        leave_summary = {"pending": 0, "approved": 0, "rejected": 0, "recent": []}
+        doc_summary = {"verified": 0, "pending": 0, "rejected": 0, "recent": []}
+        eval_summary = {"latest_score": None, "latest_grade": None, "total": 0}
+        
         if emp_id:
-            conn, cur = get_db()
+            conn, cur = None, None
             try:
+                conn, cur = get_db(True)
+                
+                # Letters
                 cur.execute("SELECT * FROM generated_letters WHERE employee_id = %s ORDER BY generated_at DESC", (emp_id,))
                 letters = cur.fetchall()
+                
+                # Today's attendance
+                cur.execute("""
+                    SELECT status, check_in_time, check_out_time, duration 
+                    FROM hrms_attendance 
+                    WHERE employee_id = %s AND attendance_date = CURRENT_DATE
+                """, (emp_id,))
+                today_attendance = cur.fetchone()
+                
+                # Leave requests summary
+                cur.execute("""
+                    SELECT status, COUNT(*) as count 
+                    FROM leave_applications 
+                    WHERE employee_id = %s 
+                    GROUP BY status
+                """, (emp_id,))
+                for row in cur.fetchall():
+                    status_lower = row["status"].lower()
+                    if "pending" in status_lower:
+                        leave_summary["pending"] = row["count"]
+                    elif "approved" in status_lower:
+                        leave_summary["approved"] = row["count"]
+                    elif "rejected" in status_lower:
+                        leave_summary["rejected"] = row["count"]
+                
+                # Recent leave applications
+                cur.execute("""
+                    SELECT la.from_date, la.to_date, la.status, lt.name as leave_type 
+                    FROM leave_applications la
+                    JOIN leave_types lt ON la.leave_type_id = lt.id
+                    WHERE la.employee_id = %s 
+                    ORDER BY la.from_date DESC LIMIT 3
+                """, (emp_id,))
+                leave_summary["recent"] = cur.fetchall()
+
+                # Document summary
+                cur.execute("""
+                    SELECT verification_status, COUNT(*) as count 
+                    FROM employee_documents 
+                    WHERE employee_id = %s 
+                    GROUP BY verification_status
+                """, (emp_id,))
+                for row in cur.fetchall():
+                    status_lower = row["verification_status"].lower()
+                    if "pending" in status_lower:
+                        doc_summary["pending"] = row["count"]
+                    elif "verified" in status_lower:
+                        doc_summary["verified"] = row["count"]
+                    elif "rejected" in status_lower:
+                        doc_summary["rejected"] = row["count"]
+
+                # Recent documents
+                cur.execute("""
+                    SELECT document_title, document_type, verification_status 
+                    FROM employee_documents 
+                    WHERE employee_id = %s 
+                    ORDER BY created_at DESC LIMIT 3
+                """, (emp_id,))
+                doc_summary["recent"] = cur.fetchall()
+
+                # Performance summary
+                cur.execute("""
+                    SELECT final_score, grade, evaluation_date 
+                    FROM performance_evaluations 
+                    WHERE employee_id = %s AND status = 'Completed' 
+                    ORDER BY evaluation_date DESC LIMIT 1
+                """, (emp_id,))
+                latest_eval = cur.fetchone()
+                if latest_eval:
+                    eval_summary["latest_score"] = latest_eval["final_score"]
+                    eval_summary["latest_grade"] = latest_eval["grade"]
+
+                cur.execute("SELECT COUNT(*) as total FROM performance_evaluations WHERE employee_id = %s", (emp_id,))
+                eval_summary["total"] = cur.fetchone()["total"]
+
             except Exception as e:
-                print("Error fetching letters for employee:", e)
+                print("Error fetching employee dashboard stats:", e)
             finally:
                 if conn: release_db(conn, cur)
-        return render_template("employee_dashboard.html", letters=letters)
+
+        return render_template(
+            "employee_dashboard.html",
+            letters=letters,
+            today_attendance=today_attendance,
+            leave_summary=leave_summary,
+            doc_summary=doc_summary,
+            eval_summary=eval_summary
+        )
 
     total_jobs = 0
     total_applications = 0
+    total_employees = 0
+    pending_leaves = 0
+    pending_docs = 0
     perf_metrics = {
         "upcoming": [],
         "due_today": [],
@@ -400,6 +494,7 @@ def dashboard():
     }
     
     notifications = []
+    conn, cur = None, None
 
     try:
         conn, cur = get_db(True)
@@ -409,6 +504,15 @@ def dashboard():
 
         cur.execute("SELECT COUNT(*) AS total FROM applications")
         total_applications = cur.fetchone()["total"]
+
+        cur.execute("SELECT COUNT(*) AS total FROM hrms_employees WHERE status = 'Active'")
+        total_employees = cur.fetchone()["total"]
+
+        cur.execute("SELECT COUNT(*) AS total FROM leave_applications WHERE status = 'Pending'")
+        pending_leaves = cur.fetchone()["total"]
+
+        cur.execute("SELECT COUNT(*) AS total FROM employee_documents WHERE verification_status = 'Pending'")
+        pending_docs = cur.fetchone()["total"]
 
         # Calculate Performance Analytics
         today = date.today()
@@ -517,18 +621,22 @@ def dashboard():
         """)
         perf_metrics["bottom_performers"] = cur.fetchall()
 
-        release_db(conn, cur)
     except Exception as e:
         print("Error fetching dashboard metrics:", e)
+    finally:
+        if conn:
+            release_db(conn, cur)
 
     return render_template(
         "dashboard.html",
         total_jobs=total_jobs,
         total_applications=total_applications,
+        total_employees=total_employees,
+        pending_leaves=pending_leaves,
+        pending_docs=pending_docs,
         perf_metrics=perf_metrics,
         notifications=notifications
     )
-
 # =========================
 # JOB MANAGEMENT
 # =========================
@@ -1173,36 +1281,54 @@ def settings():
             message_type = "error"
         else:
             user_id = session.get("user_id")
-            conn, cur = get_db(True)
+            try:
+                conn, cur = get_db(True)
 
-            cur.execute("SELECT password, email FROM hrms_users WHERE id = %s", (user_id,))
-            user = cur.fetchone()
+                cur.execute("SELECT password, email FROM hrms_users WHERE id = %s", (user_id,))
+                user = cur.fetchone()
 
-            # Some legacy rows may store plain text; accept once and upgrade to hash.
-            is_old_password_valid = False
-            if user:
-                stored_password = user["password"] or ""
-                is_old_password_valid = (
-                    check_password_hash(stored_password, old_password)
-                    if stored_password.startswith("pbkdf2:") or stored_password.startswith("scrypt:")
-                    else stored_password == old_password
-                )
+                # Some legacy rows may store plain text; accept once and upgrade to hash.
+                is_old_password_valid = False
+                if user:
+                    stored_password = user["password"] or ""
+                    is_old_password_valid = (
+                        check_password_hash(stored_password, old_password)
+                        if stored_password.startswith("pbkdf2:") or stored_password.startswith("scrypt:")
+                        else stored_password == old_password
+                    )
 
-            if user and is_old_password_valid:
-                # Password is correct, update it
-                hashed_password = generate_password_hash(new_password)
-                cur.execute(
-                    "UPDATE hrms_users SET password = %s WHERE id = %s",
-                    (hashed_password, user_id)
-                )
-                conn.commit()
-                message = "Password updated successfully!"
-                message_type = "success"
-            else:
-                message = "Old password is incorrect"
-                message_type = "error"
-            
-            release_db(conn, cur)
+                if user and is_old_password_valid:
+                    # Password is correct, update it
+                    hashed_password = generate_password_hash(new_password)
+                    cur.execute(
+                        "UPDATE hrms_users SET password = %s WHERE id = %s",
+                        (hashed_password, user_id)
+                    )
+                    conn.commit()
+                    message = "Password updated successfully!"
+                    message_type = "success"
+                else:
+                    message = "Old password is incorrect"
+                    message_type = "error"
+                
+                release_db(conn, cur)
+            except Exception as e:
+                print("Database password update failed, using Supabase fallback:", e)
+                try:
+                    from supabase_client import supabase
+                    # Attempt Direct Table Update via Supabase Client
+                    hashed_password = generate_password_hash(new_password)
+                    res = supabase.table("hrms_users").update({"password": hashed_password}).eq("id", user_id).execute()
+                    if res.data:
+                        message = "Password updated successfully via Supabase!"
+                        message_type = "success"
+                    else:
+                        message = "Old password verification or update failed."
+                        message_type = "error"
+                except Exception as ex:
+                    print("Supabase update failed:", ex)
+                    message = "Password update failed. Database and Supabase are unreachable."
+                    message_type = "error"
     
     return render_template("settings.html", message=message, message_type=message_type)
 
@@ -1220,7 +1346,9 @@ def salary_records():
                            THEN CONCAT('Manual Salary (', es.monthly_salary, ')')
                        ELSE COALESCE(s.name, 'Not Assigned')
                    END AS structure_name,
-                   es.effective_from::text AS effective_from
+                   es.effective_from::text AS effective_from,
+                   es.monthly_salary AS monthly_amount,
+                   COALESCE(es.annual_ctc, es.monthly_salary * 12) AS annual_ctc
             FROM employee_salary es
             JOIN hrms_employees e ON es.employee_id = e.id
             LEFT JOIN salary_structures s ON es.structure_id = s.id
@@ -1229,8 +1357,12 @@ def salary_records():
 
         records = cur.fetchall()
         release_db(conn, cur)
-    except Exception:
+    except Exception as e:
+        print("Error fetching salary records:", e)
         records = supabase_rest.list_salary_records()
+        for r in records:
+            r["monthly_amount"] = r.get("monthly_salary") or 0.0
+            r["annual_ctc"] = r.get("annual_ctc") or (r["monthly_amount"] * 12.0)
 
     return render_template("salary_records.html", records=records)
 
@@ -1250,7 +1382,9 @@ def download_salary_records():
                         THEN CONCAT('Manual Salary (', es.monthly_salary, ')')
                     ELSE COALESCE(s.name, 'Not Assigned')
                 END AS Salary_Structure,
-                es.effective_from::text AS Effective_From
+                es.effective_from::text AS Effective_From,
+                es.monthly_salary AS Monthly_Amount,
+                COALESCE(es.annual_ctc, es.monthly_salary * 12) AS Annual_CTC
             FROM employee_salary es
             JOIN hrms_employees e ON es.employee_id = e.id
             LEFT JOIN salary_structures s ON es.structure_id = s.id
@@ -1258,7 +1392,8 @@ def download_salary_records():
         """
 
         df = pd.read_sql(query, conn)
-    except Exception:
+    except Exception as e:
+        print("Error downloading salary records:", e)
         records = supabase_rest.list_salary_records()
         df = pd.DataFrame(
             [
@@ -1266,6 +1401,8 @@ def download_salary_records():
                     "Employee": record.get("employee_name"),
                     "Salary_Structure": record.get("structure_name"),
                     "Effective_From": record.get("effective_from"),
+                    "Monthly_Amount": record.get("monthly_salary") or 0.0,
+                    "Annual_CTC": record.get("annual_ctc") or ((record.get("monthly_salary") or 0.0) * 12.0),
                 }
                 for record in records
             ]

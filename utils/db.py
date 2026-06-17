@@ -20,7 +20,7 @@ def init_db_pool():
     if not db_pool:
         db_pool = pool.SimpleConnectionPool(
             minconn=1,
-            maxconn=5,
+            maxconn=20,
             dsn=DATABASE_URL,
             sslmode="require"
         )

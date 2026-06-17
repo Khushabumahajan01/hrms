@@ -220,6 +220,12 @@
         border: 1px solid rgba(239, 68, 68, 0.3);
     }
 
+    .status-warning {
+        background: rgba(234, 179, 8, 0.15);
+        color: #eab308;
+        border: 1px solid rgba(234, 179, 8, 0.3);
+    }
+
     /* ===== DROPDOWN ===== */
     .dropdown {
         position: relative;
@@ -254,7 +260,7 @@
         color: #fff;
     }
 
-    .dropdown:hover .dropdown-content {
+    .dropdown-content.show {
         display: block;
     }
 
@@ -369,7 +375,7 @@
 
         // Calculate Stats
         let total = allEmployees.length;
-        let active = 0, inactive = 0, newThisMonth = 0;
+        let active = 0, inactive = 0, newThisMonth = 0, onLeave = 0;
 
         let depts = new Set();
         let currentMonth = new Date().getMonth();
@@ -377,7 +383,8 @@
 
         allEmployees.forEach(emp => {
             if (emp.status === "Active") active++;
-            else inactive++;
+            else if (emp.status === "Inactive") inactive++;
+            else if (emp.status === "On Leave") onLeave++;
 
             if (emp.department) depts.add(emp.department);
 
@@ -393,6 +400,15 @@
         document.getElementById("st_active").innerText = active;
         document.getElementById("st_inactive").innerText = inactive;
         document.getElementById("st_new").innerText = newThisMonth;
+        document.getElementById("st_leave").innerText = onLeave;
+
+        // Fetch Pending Docs count from API
+        fetch("/hrms/employees/documents/api/pending")
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById("st_docs").innerText = (data.documents || []).length;
+            })
+            .catch(err => console.error("Error loading pending docs count:", err));
 
         // Keep predefined departments but add any dynamic ones
         const deptSelect = document.getElementById("deptFilter");
@@ -410,12 +426,14 @@
         const q = document.getElementById("searchInput").value.toLowerCase();
         const dept = document.getElementById("deptFilter").value;
         const status = document.getElementById("statusFilter").value;
+        const type = document.getElementById("typeFilter").value;
 
         const filtered = allEmployees.filter(emp => {
             let matchQ = emp.full_name.toLowerCase().includes(q) || (emp.employee_code && emp.employee_code.toLowerCase().includes(q));
             let matchD = dept === "" || emp.department === dept;
             let matchS = status === "" || emp.status === status;
-            return matchQ && matchD && matchS;
+            let matchT = type === "" || emp.employment_type === type;
+            return matchQ && matchD && matchS && matchT;
         });
 
         renderTable(filtered);
@@ -432,9 +450,9 @@
 
         employees.forEach(emp => {
             let init = emp.full_name.charAt(0).toUpperCase();
-            let code = emp.employee_code || `EMP${emp.id.toString().padStart(3, '0')}`;
+            let code = emp.employee_code || `EMP${emp.id.toString().substring(0, 5)}`;
             let dept = emp.department || "-";
-            let desig = emp.role_name || "Employee"; // Normally designation, but using role_name as fallback
+            let desig = emp.designation || "-";
             let mgr = emp.manager_name || "N/A";
             let jd = emp.joining_date ? emp.joining_date : "-";
 
@@ -454,13 +472,13 @@
             <td>${mgr}</td>
             <td>${jd}</td>
             <td>
-                <span class="status-badge ${emp.status === "Active" ? "status-active" : "status-inactive"}">
+                <span class="status-badge ${emp.status === "Active" ? "status-active" : (emp.status === "On Leave" ? "status-warning" : "status-inactive")}">
                     ${emp.status}
                 </span>
             </td>
             <td style="text-align:right;" onclick="event.stopPropagation();">
                 <div class="dropdown">
-                    <button class="btn-more">More ▾</button>
+                    <button class="btn-more" onclick="event.stopPropagation(); toggleDropdown(this);">More ▾</button>
                     <div class="dropdown-content">
                         <a href="/hrms/employees/${emp.id}/edit">✏️ Edit Employee</a>
                         <a href="/hrms/employees/${emp.id}/profile?tab=profile">👤 View Profile</a>
@@ -469,6 +487,12 @@
                         <a href="/hrms/employees/${emp.id}/profile?tab=leaves">🌴 Leave History</a>
                         <a href="/hrms/employees/${emp.id}/profile?tab=performance">📊 Performance Evaluations</a>
                         <a href="/hrms/performance/start/${emp.id}" style="color: #38bdf8;">⭐ Start Performance Evaluation</a>
+                        <a href="#" onclick="event.stopPropagation(); toggleStatus('${emp.id}', '${emp.status === 'Active' ? 'Inactive' : 'Active'}')">
+                            ${emp.status === 'Active' ? '⏸️ Deactivate Employee' : '▶️ Activate Employee'}
+                        </a>
+                        <a href="#" onclick="event.stopPropagation(); deleteEmployee('${emp.id}')" style="color: #ef4444; border-top: 1px solid #1e293b;">
+                            🗑️ Delete Employee
+                        </a>
                         <a href="/hrms/exit/manage/${emp.id}" style="color: #ef4444; border-top: 1px solid #1e293b; padding-top: 10px; margin-top: 5px;">🚪 Exit Management</a>
                     </div>
                 </div>
@@ -477,19 +501,48 @@
         });
     }
 
+    function toggleDropdown(button) {
+        document.querySelectorAll(".dropdown-content").forEach(el => {
+            if (el !== button.nextElementSibling) {
+                el.classList.remove("show");
+            }
+        });
+        button.nextElementSibling.classList.toggle("show");
+    }
+
+    window.onclick = function(event) {
+        if (!event.target.matches('.btn-more')) {
+            document.querySelectorAll(".dropdown-content").forEach(el => {
+                el.classList.remove("show");
+            });
+        }
+    };
+
     async function toggleStatus(id, status) {
-        await fetch(`/hrms/employees/${id}/status`, {
+        const res = await fetch(`/hrms/employees/${id}/status`, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: `status=${status}`
         });
-        loadEmployees();
+        const data = await res.json();
+        if (data.error) {
+            showToast(data.error, "error");
+        } else {
+            showToast(data.message || "Status updated successfully!", "success");
+            loadEmployees();
+        }
     }
 
     async function deleteEmployee(id) {
         if (!confirm("Are you sure you want to delete this employee?")) return;
-        await fetch(`/hrms/employees/${id}/delete`, { method: "POST" });
-        loadEmployees();
+        const res = await fetch(`/hrms/employees/${id}/delete`, { method: "POST" });
+        const data = await res.json();
+        if (data.error) {
+            showToast(data.error, "error");
+        } else {
+            showToast("Employee deleted successfully!", "success");
+            loadEmployees();
+        }
     }
 
     loadEmployees();

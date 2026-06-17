@@ -1,6 +1,6 @@
 print("HRMS EMPLOYEES ROUTES LOADED")
 
-from flask import Blueprint, request, render_template, jsonify, redirect, session
+from flask import Blueprint, request, render_template, jsonify, redirect, session, flash
 from datetime import date
 from utils.db import get_db, release_db
 from utils import supabase_rest
@@ -94,18 +94,29 @@ def employees_list():
         cur.execute("""
             SELECT
                 e.id,
+                e.employee_code,
                 e.full_name,
                 e.email,
                 e.department,
                 e.status,
-                r.role_name
+                e.joining_date,
+                e.employment_type,
+                e.designation,
+                r.role_name,
+                m.full_name as manager_name
             FROM hrms_employees e
             LEFT JOIN hrms_roles r ON e.role_id = r.id
+            LEFT JOIN hrms_employees m ON e.manager_id = m.id
             WHERE e.status != 'Deleted'
             ORDER BY e.id DESC
         """)
 
         employees = cur.fetchall()
+        
+        for emp in employees:
+            if emp.get("joining_date"):
+                emp["joining_date"] = str(emp["joining_date"])
+                
         release_db(conn, cur)
     except Exception:
         employees = supabase_rest.list_employees()
@@ -199,7 +210,7 @@ def api_verify_document(doc_id):
         print(f"Error verifying document: {e}")
         return jsonify({"error": str(e)}), 500
 
-@employees_bp.route("/<int:employee_id>/profile", methods=["GET"])
+@employees_bp.route("/<employee_id>/profile", methods=["GET"])
 @login_required
 def employee_profile(employee_id):
     if not hr_admin_required():
@@ -258,7 +269,8 @@ def add_employee():
         "employee_code",
         "full_name",
         "email",
-        "role_id"
+        "role_id",
+        "password" # <--- Added password to required fields
     ]
 
     for field in required_fields:
@@ -279,9 +291,7 @@ def add_employee():
             release_db(conn, cur)
             return jsonify({"error": "Login email already exists"}), 400
 
-        # Generate credentials
-        import secrets
-        plain_password = secrets.token_urlsafe(8)
+        plain_password = data.get("password")
         hashed_password = generate_password_hash(plain_password)
         joining_date = data.get("joining_date") or date.today()
 
@@ -421,9 +431,8 @@ def add_employee():
         print("Add employee error:", e)
         return jsonify({"error": str(e)}), 500
 
-
 # =========================
-# EDIT EMPLOYEE UI
+# EDIT EMPLOYEE UI (GET)
 # =========================
 @employees_bp.route("/<employee_id>/edit", methods=["GET"])
 @login_required
@@ -464,7 +473,7 @@ def edit_employee_ui(employee_id):
 
 
 # =========================
-# UPDATE EMPLOYEE
+# UPDATE EMPLOYEE (POST)
 # =========================
 @employees_bp.route("/<employee_id>/edit", methods=["POST"])
 @login_required
@@ -477,6 +486,7 @@ def edit_employee(employee_id):
     try:
         conn, cur = get_db(True)
 
+        # 1. Update the Employee Profile
         cur.execute("""
             UPDATE hrms_employees
             SET full_name=%s,
@@ -494,6 +504,28 @@ def edit_employee(employee_id):
             employee_id
         ))
 
+        # 2. Sync the Role and Email to the Login Table
+        cur.execute("""
+            UPDATE hrms_users 
+            SET email=%s,
+                role_id=%s
+            WHERE employee_id=%s
+        """, (
+            data["email"],
+            data["role_id"],
+            employee_id
+        ))
+
+        # 3. Admin Password Reset (If provided)
+        new_password = data.get("password", "").strip()
+        if new_password and session.get("role") == "Admin":
+            hashed_new = generate_password_hash(new_password)
+            cur.execute("""
+                UPDATE hrms_users 
+                SET password = %s 
+                WHERE employee_id = %s
+            """, (hashed_new, employee_id))
+
         conn.commit()
         release_db(conn, cur)
     except Exception:
@@ -507,7 +539,6 @@ def edit_employee(employee_id):
         )
 
     return redirect("/hrms/employees/ui")
-
 
 # =========================
 # CHANGE STATUS
@@ -816,7 +847,7 @@ def api_pending_documents():
     conn, cur = get_db(True)
     try:
         cur.execute("""
-            SELECT d.id, d.document_type, d.document_title, d.created_at, e.full_name
+            SELECT d.id, d.document_type, d.document_title, d.created_at, e.full_name, e.id AS employee_id
             FROM employee_documents d
             JOIN hrms_employees e ON d.employee_id = e.id
             WHERE d.verification_status = 'Pending'

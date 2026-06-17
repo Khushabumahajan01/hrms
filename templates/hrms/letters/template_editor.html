@@ -2,9 +2,7 @@
 
 {% block content %}
 <style>
-.te-container { display:flex; max-width:1400px; margin:0 auto; padding:20px; gap:20px; color:#e5e7eb; }
-.te-main { flex:3; }
-.te-sidebar { flex:1; display:flex; flex-direction:column; gap:15px; }
+.te-container { max-width:1000px; margin:0 auto; padding:20px; color:#e5e7eb; }
 .te-card { background:#111827; border:1px solid #1f2937; border-radius:8px; padding:20px; }
 .form-group { margin-bottom:15px; }
 .form-group label { display:block; font-size:0.85rem; color:#9ca3af; margin-bottom:5px; }
@@ -28,85 +26,68 @@ select.form-control { appearance:none; background-image:url("data:image/svg+xml;
 </style>
 
 <div class="te-container">
-    <div class="te-main">
-        <h2 style="margin-bottom:20px;">Template Editor</h2>
+    <div class="letters-tabs" style="display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 1px solid #1f2937; padding-bottom: 15px;">
+        <a href="/hrms/letters/generator" style="padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: 500; color: #9ca3af; background: rgba(255,255,255,0.02);">Generate Letter</a>
+        <a href="/hrms/letters/history" style="padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: 500; color: #9ca3af; background: rgba(255,255,255,0.02);">Document History</a>
+        <a href="/hrms/letters/templates" style="padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: 600; background: #3b82f6; color: white;">Template Editor</a>
+    </div>
 
-        <!-- Template selector -->
-        <div class="te-card" style="margin-bottom:20px;">
-            <div class="form-group">
-                <label>Select Template to Edit *</label>
-                <select id="doc-select" class="form-control" style="background-color:#1e3a8a; border-color:#3b82f6;" onchange="loadTemplateForEditing()">
-                    <option value="">Choose a template...</option>
-                    {% for t in templates %}
-                    <option value="{{ t.id }}" data-name="{{ t.template_name }}">{{ t.template_name }}{% if t.updated_by %} (last edited by {{ t.updated_by }}){% endif %}</option>
-                    {% endfor %}
-                </select>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0; color: #fff;">Template Editor</h2>
+        <button class="btn-primary" onclick="openAddModal()" style="display: inline-flex; align-items: center; gap: 6px;">➕ Add New Template</button>
+    </div>
+
+    <!-- Template selector -->
+    <div class="te-card" style="margin-bottom:20px;">
+        <div class="form-group">
+            <label>Select Template to Edit *</label>
+            <select id="doc-select" class="form-control" style="background-color:#1e3a8a; border-color:#3b82f6;" onchange="loadTemplateForEditing()">
+                <option value="">Choose a template...</option>
                 {% for t in templates %}
-                <input type="hidden" id="tpl_content_{{ t.id }}" value="{{ t.template_content | e }}">
+                <option value="{{ t.id }}" data-name="{{ t.template_name }}">{{ t.template_name }}{% if t.updated_by %} (last edited by {{ t.updated_by }}){% endif %}</option>
                 {% endfor %}
-            </div>
-        </div>
-
-        <!-- Placeholder Reference -->
-        <div class="info-box" style="margin-bottom:20px;">
-            <strong>Placeholder Reference:</strong> Use <code style="color:#60a5fa;">[placeholder_name]</code> in your template. These are auto-filled when generating a letter:<br>
-            <span style="color:#60a5fa; font-weight:600;">
-            [Employee_Name] [Employee_ID] [Designation] [Department] [Joining_Date] [Last_Working_Date]
-            [Company_Name] [HR_Name] [Date_of_issue] [Settlement_Date]
-            [Pending_Salary] [Leave_Encashment] [Bonus] [Reimbursements] [Deductions] [FNF_Amount]
-            [Key_Skills] [Projects]
-            </span>
-        </div>
-
-        <!-- Editor area (hidden until template selected) -->
-        <div id="editor-section" class="te-card" style="display:none;">
-            <form action="/hrms/letters/templates/save" method="POST" id="edit-form">
-                <div class="form-group">
-                    <label>Template Name</label>
-                    <input type="text" name="template_name" id="edit-template-name" class="form-control" readonly style="background:#1f2937;">
-                </div>
-                <div class="form-group">
-                    <label>Template Content (HTML)</label>
-                    <textarea name="template_content" id="edit-template-content" class="form-control" rows="22" style="font-family:'Courier New',monospace; font-size:13px; line-height:1.6;"></textarea>
-                </div>
-                <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                    <button type="submit" class="btn-primary">💾 Save Template</button>
-                    <button type="button" class="btn-success" onclick="previewTemplate()">👁 Preview</button>
-                    <button type="button" class="btn-danger" onclick="deleteTemplate()">🗑 Delete Template</button>
-                </div>
-            </form>
-            <form id="delete-form" method="POST" style="display:none;"></form>
-        </div>
-
-        <!-- Live preview area -->
-        <div id="preview-area" class="te-card" style="display:none; margin-top:20px;">
-            <h4 style="margin-bottom:10px; color:#60a5fa;">Template Preview</h4>
-            <div id="template-preview-body" style="background:#fff; color:#000; padding:20px; border-radius:6px; min-height:300px; font-family:Arial,sans-serif;">
-            </div>
+            </select>
+            {% for t in templates %}
+            <input type="hidden" id="tpl_content_{{ t.id }}" value="{{ t.template_content | e }}">
+            {% endfor %}
         </div>
     </div>
 
-    <div class="te-sidebar">
-        <a href="/hrms/letters/generator" class="action-box">
-            <div>
-                <div style="font-weight:600; margin-bottom:5px;">Generate Letter</div>
-                <div style="font-size:0.8rem; color:#9ca3af;">Go to letter generator</div>
+    <!-- Placeholder Reference -->
+    <div class="info-box" style="margin-bottom:20px;">
+        <strong>Placeholder Reference:</strong> Use <code style="color:#60a5fa;">[placeholder_name]</code> in your template. These are auto-filled when generating a letter:<br>
+        <span style="color:#60a5fa; font-weight:600;">
+        [Employee_Name] [Employee_ID] [Designation] [Department] [Joining_Date] [Last_Working_Date]
+        [Company_Name] [HR_Name] [Date_of_issue] [Settlement_Date]
+        [Pending_Salary] [Leave_Encashment] [Bonus] [Reimbursements] [Deductions] [FNF_Amount]
+        [Key_Skills] [Projects]
+        </span>
+    </div>
+
+    <!-- Editor area (hidden until template selected) -->
+    <div id="editor-section" class="te-card" style="display:none;">
+        <form action="/hrms/letters/templates/save" method="POST" id="edit-form">
+            <div class="form-group">
+                <label>Template Name</label>
+                <input type="text" name="template_name" id="edit-template-name" class="form-control" readonly style="background:#1f2937;">
             </div>
-            <div class="action-icon">📄</div>
-        </a>
-        <a href="/hrms/letters/history" class="action-box">
-            <div>
-                <div style="font-weight:600; margin-bottom:5px;">Document History</div>
-                <div style="font-size:0.8rem; color:#9ca3af;">View generated documents</div>
+            <div class="form-group">
+                <label>Template Content (HTML)</label>
+                <textarea name="template_content" id="edit-template-content" class="form-control" rows="22" style="font-family:'Courier New',monospace; font-size:13px; line-height:1.6;"></textarea>
             </div>
-            <div class="action-icon">📜</div>
-        </a>
-        <div class="action-box" onclick="openAddModal()">
-            <div>
-                <div style="font-weight:600; margin-bottom:5px;">Add New Template</div>
-                <div style="font-size:0.8rem; color:#9ca3af;">Create a custom letter template</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button type="submit" class="btn-primary">💾 Save Template</button>
+                <button type="button" class="btn-success" onclick="previewTemplate()">👁 Preview</button>
+                <button type="button" class="btn-danger" onclick="deleteTemplate()">🗑 Delete Template</button>
             </div>
-            <div class="action-icon">➕</div>
+        </form>
+        <form id="delete-form" method="POST" style="display:none;"></form>
+    </div>
+
+    <!-- Live preview area -->
+    <div id="preview-area" class="te-card" style="display:none; margin-top:20px;">
+        <h4 style="margin-bottom:10px; color:#60a5fa;">Template Preview</h4>
+        <div id="template-preview-body" style="background:#fff; color:#000; padding:20px; border-radius:6px; min-height:300px; font-family:Arial,sans-serif;">
         </div>
     </div>
 </div>

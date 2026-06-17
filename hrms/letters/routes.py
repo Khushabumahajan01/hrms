@@ -421,13 +421,43 @@ def generate_pdf():
         return send_file(pdf_path, as_attachment=True, download_name=file_name)
 
     except Exception as e:
-        print("PDF Generation Error:", e)
+        print("PDF Generation Error, using browser print fallback:", e)
         import traceback; traceback.print_exc()
-        flash(f"Failed to generate PDF: {str(e)}", "error")
+        session["fallback_html"] = full_html
+        session["fallback_doc_type"] = document_type
+        session["fallback_emp_id"] = emp_id
+        session["fallback_exit_id"] = exit_id
+        return redirect(url_for("letters.print_fallback"))
 
-    if exit_id:
-        return redirect(f"/hrms/exit/manage/{emp_id}")
-    return redirect("/hrms/letters/history")
+@letters_bp.route("/print-fallback")
+@login_required
+def print_fallback():
+    html = session.pop("fallback_html", "<h3>No document content found</h3>")
+    doc_type = session.pop("fallback_doc_type", "Document")
+    emp_id = session.pop("fallback_emp_id", None)
+    exit_id = session.pop("fallback_exit_id", None)
+    
+    if emp_id:
+        try:
+            conn, cur = get_db(True)
+            cur.execute("""
+                INSERT INTO generated_letters (employee_id, document_type, pdf_url, generated_by)
+                VALUES (%s, %s, %s, %s)
+            """, (emp_id, doc_type, "Browser Printed (Check Printer)", session.get("user", "System")))
+            if exit_id:
+                try:
+                    cur.execute("""
+                        INSERT INTO employee_exit_documents (employee_id, exit_id, document_type, pdf_url, generated_by)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (emp_id, exit_id, doc_type, "Browser Printed (Check Printer)", session.get("user", "System")))
+                except Exception:
+                    pass
+            conn.commit()
+            release_db(conn, cur)
+        except Exception as e:
+            print("Error saving printed letter in DB:", e)
+            
+    return render_template("hrms/letters/print_fallback.html", html=html, doc_type=doc_type)
 
 
 # ─── Document History ─────────────────────────────────────────────────────────
