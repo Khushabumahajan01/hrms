@@ -150,7 +150,10 @@
     </div>
 
     <div id="tab-docs" class="tab-content">
-        <h2 style="color:#fff; margin-top:0;">Documents</h2>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h2 style="color:#fff; margin-top:0;">Documents</h2>
+            <a href="/hrms/employees/{{ emp.id }}/documents" class="btn btn-blue" style="text-decoration:none;">Manage Documents</a>
+        </div>
         {% if documents %}
         <table class="table">
             <thead>

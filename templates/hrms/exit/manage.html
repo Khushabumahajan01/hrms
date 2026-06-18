@@ -107,7 +107,7 @@
 
 <div class="exit-container">
     <div class="exit-header">
-        <h2>Exit Management: {{ emp.full_name }} ({{ emp.id }})</h2>
+        <h2>Employee Exit History: {{ emp.full_name }} ({{ emp.id }})</h2>
         <a href="/hrms/employees/ui" class="btn-primary" style="background:#374151;">Back to Directory</a>
     </div>
 
@@ -189,7 +189,7 @@
                 <ul style="list-style:none; padding:0;">
                 {% for doc in docs %}
                     <li style="margin-bottom:10px;">
-                        <a href="{{ doc.pdf_url }}" target="_blank" style="color:#38bdf8; text-decoration:none;">📄 {{ doc.document_type }}</a>
+                        <a href="{{ doc.pdf_url }}" style="color:#38bdf8; text-decoration:none;">📄 {{ doc.document_type }}</a>
                         <span style="font-size:0.8rem; color:#6b7280;">({{ doc.generated_at.strftime('%Y-%m-%d') }})</span>
                     </li>
                 {% endfor %}

@@ -1,14 +1,9 @@
-import sys
-from utils.db import get_db, release_db
+import psycopg2, os
+from dotenv import load_dotenv
 
-conn, cur = get_db(True)
-try:
-    cur.execute("""
-        SELECT column_name, data_type 
-        FROM information_schema.columns 
-        WHERE table_name = 'hrms_employees'
-    """)
-    for row in cur.fetchall():
-        print(row)
-finally:
-    release_db(conn, cur)
+load_dotenv()
+conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+cur = conn.cursor()
+cur.execute("SELECT conname, contype, pg_get_constraintdef(c.oid) FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace WHERE conrelid = 'letter_templates'::regclass;")
+print(cur.fetchall())
+conn.close()

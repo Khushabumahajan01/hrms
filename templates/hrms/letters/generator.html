@@ -49,11 +49,11 @@ select.form-control { appearance:none; background-image:url("data:image/svg+xml;
             <select id="doc-select" class="form-control" style="background-color:#1e3a8a; border-color:#3b82f6;" onchange="loadTemplate()">
                 <option value="">Select Document Type...</option>
                 {% for t in templates %}
-                <option value="{{ t.template_name }}">{{ t.template_name }}</option>
+                <option value="{{ t.id }}" data-name="{{ t.template_name }}">{{ t.template_name }}</option>
                 {% endfor %}
             </select>
             {% for t in templates %}
-            <input type="hidden" id="tpl_{{ t.template_name | replace(' ', '_') }}" value="{{ t.template_content | e }}">
+            <input type="hidden" id="tpl_{{ t.id }}" value="{{ t.template_content | forceescape }}">
             {% endfor %}
         </div>
 
@@ -62,7 +62,8 @@ select.form-control { appearance:none; background-image:url("data:image/svg+xml;
             <select id="emp-select" class="form-control" onchange="autoFillEmployee()">
                 <option value="">Select Employee...</option>
                 {% for e in employees %}
-                <option value="{{ e.id }}" data-code="{{ e.employee_code }}" data-name="{{ e.full_name }}" data-dept="{{ e.department }}" data-desg="{{ e.designation }}" data-join="{{ e.joining_date }}">{{ e.full_name }} ({{ e.employee_code or e.id }})</option>
+                {% set code = e.employee_code if e.employee_code else ('EMP%03d' % e.id) %}
+                <option value="{{ e.id }}" data-code="{{ code }}" data-name="{{ e.full_name }}" data-dept="{{ e.department }}" data-desg="{{ e.designation }}" data-join="{{ e.joining_date }}">{{ e.full_name }} ({{ code }})</option>
                 {% endfor %}
             </select>
         </div>
@@ -79,12 +80,16 @@ select.form-control { appearance:none; background-image:url("data:image/svg+xml;
 
         <div id="placeholders-container"></div>
 
-        <form action="/hrms/letters/generate_pdf" method="POST" id="generate-form" style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">
+        <form action="/hrms/letters/generate_pdf" method="POST" id="generate-form" style="margin-top:20px;">
             <input type="hidden" name="html_content" id="final-html-content">
             <input type="hidden" name="document_type" id="final-doc-type">
             <input type="hidden" name="employee_id" id="final-emp-id">
-            <button type="button" class="btn-success" onclick="generateDocument(false)">📄 Generate PDF</button>
-            <button type="button" class="btn-secondary" onclick="generateDocument(true)">👁 Preview Letter</button>
+            <input type="hidden" name="exit_id" id="final-exit-id">
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button type="button" class="btn btn-secondary" onclick="generateDocument(true)">👁 Preview Letter</button>
+                <button type="button" class="btn btn-success" onclick="generateDocument(false)">📄 Generate PDF</button>
+                <button type="button" class="btn btn-primary" onclick="resetGenerator()" style="background:#ef4444; color:white;">🔄 Cancel / Reset</button>
+            </div>
         </form>
     </div>
 </div>
@@ -135,11 +140,11 @@ function loadTemplate() {
         return;
     }
 
-    const safeId = val.replace(/ /g, "_");
-    const hiddenTpl = document.getElementById("tpl_" + safeId);
+    const hiddenTpl = document.getElementById("tpl_" + val);
     currentTemplateHTML = hiddenTpl ? unescapeHTML(hiddenTpl.value) : "";
 
-    document.getElementById("final-doc-type").value = val;
+    const docName = sel.options[sel.selectedIndex].getAttribute("data-name");
+    document.getElementById("final-doc-type").value = docName;
 
     // Extract placeholders
     const regex = /\[(.*?)\]/g;
@@ -205,6 +210,8 @@ async function autoFillEmployee() {
 function applyEmployeeData() {
     if (!employeeData || employeeData.error) return;
     const d = employeeData;
+    
+    console.log("BROWSER CONSOLE: API response payload", d);
 
     const mapping = {
         "Employee_Name": d.full_name,
@@ -212,6 +219,9 @@ function applyEmployeeData() {
         "Designation": d.designation || d.role_name || "",
         "Department": d.department || "",
         "Joining_Date": d.joining_date || "",
+        "Email": d.email || "",
+        "Employment_Status": d.status || "",
+        "Manager_Name": d.manager_name || "",
         "Last_Working_Date": (d.fnf && d.fnf.calculated_at) ? d.fnf.calculated_at : "",
         "Pending_Salary": (d.fnf && d.fnf.pending_salary) ? d.fnf.pending_salary : "0",
         "Leave_Encashment": (d.fnf && d.fnf.leave_encashment) ? d.fnf.leave_encashment : "0",
@@ -223,10 +233,29 @@ function applyEmployeeData() {
         "HR_Name": HR_NAME,
     };
 
+    const readonlyFields = ["Employee_Name", "Employee_ID", "Department", "Designation", "Joining_Date", "Email", "Employment_Status", "Company_Name"];
+
+    let mappingResults = {};
+
     for (const [key, value] of Object.entries(mapping)) {
         const input = document.getElementById("ph_" + key);
-        if (input && value) input.value = value;
+        if (input) {
+            if (value) {
+                input.value = value;
+                mappingResults[key] = "Success: " + value;
+            } else {
+                mappingResults[key] = "Warning: Value missing from DB";
+                console.warn(`WARNING: Missing field mapping\n* Employee ID selected: ${d.id}\n* SQL query executed: SELECT e.*, m.full_name AS manager_name, r.role_name FROM hrms_employees e LEFT JOIN hrms_roles r ON e.role_id = r.id LEFT JOIN hrms_employees m ON e.manager_id = m.id WHERE e.id = ${d.id}\n* API response returned:`, d, `\n* Missing field name: ${key}`);
+            }
+            if (readonlyFields.includes(key) && input.value) {
+                input.readOnly = true;
+                input.style.backgroundColor = "#1f2937";
+                input.style.color = "#9ca3af";
+            }
+        }
     }
+    
+    console.log("BROWSER CONSOLE: Field mapping results", mappingResults);
 }
 
 function validateFields() {
@@ -259,7 +288,7 @@ function formatDate(val) {
 }
 
 async function generateDocument(isPreview) {
-    if (!validateFields()) return;
+    if (!isPreview && !validateFields()) return;
 
     let finalHtml = currentTemplateHTML;
     placeholders.forEach(p => {
@@ -267,6 +296,12 @@ async function generateDocument(isPreview) {
         if (input) {
             let val = input.value;
             if (DATE_FIELDS.includes(p)) val = formatDate(val);
+            if (isPreview && !val) {
+                // Inject dummy value for preview
+                val = "[" + p.replace(/_/g, " ") + " Sample]";
+                if (p === "Company_Name") val = COMPANY_NAME;
+                if (p === "HR_Name") val = HR_NAME;
+            }
             finalHtml = finalHtml.split("[" + p + "]").join(val);
         }
     });
@@ -288,8 +323,66 @@ async function generateDocument(isPreview) {
             document.getElementById("preview-body").innerHTML = "<p style='color:red;'>Error loading preview.</p>";
         }
     } else {
-        document.getElementById("generate-form").submit();
+        showToast("Generating document... Please wait.");
+        const formData = new FormData();
+        formData.append("html_content", finalHtml);
+        formData.append("document_type", document.getElementById("final-doc-type").value);
+        formData.append("employee_id", document.getElementById("final-emp-id").value);
+        if (document.getElementById("final-exit-id").value) {
+            formData.append("exit_id", document.getElementById("final-exit-id").value);
+        }
+
+        try {
+            const response = await fetch("/hrms/letters/generate_pdf", { method: "POST", body: formData });
+            if (response.ok) {
+                // Get filename from Content-Disposition header if possible
+                const disposition = response.headers.get('Content-Disposition');
+                let filename = 'Document.pdf';
+                if (disposition && disposition.indexOf('filename=') !== -1) {
+                    filename = disposition.split('filename=')[1].replace(/["']/g, '');
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                showToast("Letter generated successfully! Redirecting...");
+                setTimeout(() => { window.location.href = "/hrms/letters/history"; }, 1500);
+            } else {
+                const errText = await response.text();
+                showToast("Error: " + errText, true);
+            }
+        } catch (e) {
+            console.error("Generate error:", e);
+            showToast("Failed to generate PDF.", true);
+        }
     }
+}
+
+function resetGenerator() {
+    // Reset dropdowns
+    document.getElementById("emp-select").value = "";
+    document.getElementById("doc-select").value = "";
+    
+    // Clear dynamic inputs
+    document.getElementById("placeholders-container").innerHTML = "";
+    document.getElementById("builder-section").style.display = "none";
+    
+    // Reset variables
+    employeeData = null;
+    currentTemplateHTML = "";
+    placeholders = [];
+    
+    // Close preview if open
+    closePreview();
+    
+    showToast("Generator reset successfully.");
 }
 
 function closePreview() {
@@ -302,11 +395,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const doc = params.get("doc");
     const emp = params.get("emp");
     const exitId = params.get("exit");
+    
+    if (exitId) {
+        document.getElementById("final-exit-id").value = exitId;
+    }
 
     if (doc) {
         const docSelect = document.getElementById("doc-select");
         for (let i = 0; i < docSelect.options.length; i++) {
-            if (docSelect.options[i].value === doc) {
+            if (docSelect.options[i].getAttribute("data-name") === doc) {
                 docSelect.selectedIndex = i;
                 loadTemplate();
                 break;

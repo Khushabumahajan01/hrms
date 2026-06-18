@@ -7,6 +7,22 @@
 
 <div class="card" style="max-width:420px;">
 
+    {% if session.get('role') in ['Admin', 'HR'] %}
+    <h3 style="margin-bottom:12px;">Company Logo</h3>
+    <form method="POST" enctype="multipart/form-data">
+        <div style="margin-bottom:15px;">
+            {% if company and company.logo_url %}
+            <div style="margin-bottom:10px;">
+                <img src="{{ company.logo_url }}" alt="Company Logo" style="max-height:80px; border-radius:4px; border:1px solid #333;">
+            </div>
+            {% endif %}
+            <input type="file" name="logo_file" accept="image/*" class="form-control" required style="padding: 10px; background: #1a1a1a; border: 1px solid #333; color: white;">
+        </div>
+        <button type="submit" style="margin-bottom:30px; width:100%;">Upload Logo</button>
+    </form>
+    <hr style="margin:24px 0; border-color:#222;">
+    {% endif %}
+
     <h3 style="margin-bottom:12px;">Change Password</h3>
 
     <form method="POST">
